@@ -37,11 +37,41 @@ Config: the `tunnel` block in `config.json` (default `enabled:false`,
 dropping an adapter under `server/tunnel/adapters/` and registering it in
 `server/tunnel/registry.js`.
 
-## Stage 3 — Authentication & sessions
+## Stage 3 — Authentication & sessions ✅
 
-- OAuth login with **Google** and **GitHub**.
-- **2FA**.
-- Real multi-user session management on top of Stage 1's token gate.
+Login on top of Stage 1's static token, all opt-in. With OAuth off, no TOTP
+enrolled, and `requireLogin` false, the bridge behaves exactly like Stage 2 (the
+static token works everywhere). Zero new npm dependencies — built on Node's
+`crypto` and the global `fetch`. Lives in `server/auth/`.
+
+- **Signed sessions** — HMAC-SHA256 tokens, expiring and revocable, tracked by id
+  and persisted (`.data/auth-sessions.json`). Primary browser transport is an
+  httpOnly `aab_session` cookie (the WS upgrade and fetches carry it automatically);
+  `X-Session-Token` / `Authorization: Bearer` / `?session=` work for API clients.
+- **TOTP 2FA** (RFC 6238) — enroll from the UI (`/api/auth/totp/setup` → `confirm`),
+  scan the `otpauth://` QR, get one-time recovery codes. A replay guard tracks the
+  last accepted step counter. Operator-only.
+- **OAuth** — Google (auth-code + PKCE S256) and GitHub (auth-code + state). CSRF
+  `state` is single-use and TTL-bounded. Identity is checked against a per-provider
+  allowlist (`allowedEmails` / `allowedLogins`); an empty allowlist fails closed
+  unless `claimFirstUser` is on (first successful login claims the bridge, TOFU).
+- **The one rule** — the static token is a *direct* credential UNLESS `requireLogin`
+  is set OR a TOTP secret is confirmed; then it becomes *login-only* (must be
+  exchanged, with the 2FA code, for a session). This is what makes 2FA real.
+
+Config: the `auth` block in `config.json` (or `BRIDGE_*` env overrides — keep
+OAuth client secrets in env). Routes: `POST /api/auth/login`, `/logout`,
+`GET /api/auth/config|me|sessions`, `DELETE /api/auth/sessions/:id`,
+`GET /api/auth/oauth/:provider/{start,callback}`, `/api/auth/totp/{status,setup,confirm,disable}`.
+
+Defense-in-depth added here: a CSRF Origin check on cookie-authenticated writes
+(bearer/token clients are exempt — they are not CSRF-able), an expanded file-API
+denylist for secret-bearing dotfiles, and a bounded OAuth pending-state map.
+
+Known residuals (deferred to Stage 4 hardening): `getClientIP` trusts
+`X-Forwarded-For` unconditionally — behind an untrusted proxy the per-IP login
+rate limit is evadable (the global cap still applies); set `callbackBaseUrl` when
+OAuth is exposed so the redirect URI is not derived from request headers.
 
 ## Stage 4 — Sandboxing & safety
 

@@ -95,6 +95,10 @@
   #gate input { width: 100%; margin-bottom: 12px; }
   #gate button { width: 100%; }
   #gate .err { color: var(--red); font-size: 12px; margin: 0 0 10px; min-height: 16px; }
+  #gate .divider { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; margin: 14px 0 10px; }
+  #gate .divider::before, #gate .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  #gate .oauthBtn { margin-bottom: 8px; background: #21262d; }
+  #gate .oauthBtn:hover { background: #30363d; }
 
   @media (max-width: 640px) {
     #bar .title { width: 100%; margin-bottom: 2px; }
@@ -119,11 +123,20 @@
 <div id="gate">
   <div class="card">
     <h1>AnyAgent<span class="dot">·</span>Bridge</h1>
-    <p>Enter the access token printed in the server console to connect.</p>
+    <p id="gateMsg">Enter the access token printed in the server console to connect.</p>
     <p class="err" id="gateErr"></p>
     <label for="tokenInput">Access token</label>
     <input id="tokenInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="paste token…" />
+    <div id="totpRow" style="display:none">
+      <label for="totpInput">2FA code</label>
+      <input id="totpInput" type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="6-digit code" />
+    </div>
     <button class="primary" id="gateBtn">Connect</button>
+    <div id="oauthRow" style="display:none">
+      <div class="divider">or</div>
+      <button class="oauthBtn" id="oauthGoogle" data-provider="google" style="display:none">Continue with Google</button>
+      <button class="oauthBtn" id="oauthGithub" data-provider="github" style="display:none">Continue with GitHub</button>
+    </div>
   </div>
 </div>
 
@@ -136,6 +149,8 @@
   // ---------- DOM ----------
   const $ = (id) => document.getElementById(id);
   const gate = $("gate"), gateBtn = $("gateBtn"), gateErr = $("gateErr"), tokenInput = $("tokenInput");
+  const gateMsg = $("gateMsg"), totpRow = $("totpRow"), totpInput = $("totpInput");
+  const oauthRow = $("oauthRow"), oauthGoogle = $("oauthGoogle"), oauthGithub = $("oauthGithub");
   const agentSel = $("agentSel"), startBtn = $("startBtn"), projectSel = $("projectSel");
   const statusEl = $("status"), statusText = $("statusText");
 
@@ -211,7 +226,11 @@
   // ---------- WebSocket ----------
   function wsUrl() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`;
+    // With a JS-held session/static token, pass it as ?token=. For cookie-based
+    // sessions (OAuth) there is no JS token — the browser sends the session
+    // cookie on the upgrade automatically, so connect with no query.
+    const q = token ? `?token=${encodeURIComponent(token)}` : "";
+    return `${proto}//${location.host}/ws${q}`;
   }
 
   function connect() {
@@ -311,7 +330,10 @@
 
   // ---------- REST: agents + projects ----------
   async function api(path) {
-    const res = await fetch(path, { headers: { Authorization: "Bearer " + token } });
+    // Always include cookies (cookie-based OAuth sessions); add the Bearer header
+    // too when we hold a JS token (static token / token-login session).
+    const headers = token ? { Authorization: "Bearer " + token } : {};
+    const res = await fetch(path, { credentials: "include", headers });
     if (res.status === 401 || res.status === 403) {
       const err = new Error("unauthorized"); err.unauthorized = true; throw err;
     }
@@ -375,64 +397,127 @@
     if (term) term.focus();
   });
 
-  // ---------- Token gate ----------
+  // ---------- Login gate ----------
   function showGate(errMsg) {
     setStatus("disconnected", "disconnected");
     manualClose = true;
     if (ws) { try { ws.close(); } catch (_) {} ws = null; }
     gateErr.textContent = errMsg || "";
     gate.style.display = "flex";
-    tokenInput.value = token || "";
     setTimeout(() => tokenInput.focus(), 50);
   }
 
   function hideGate() { gate.style.display = "none"; }
 
-  async function authenticateAndStart(candidate) {
-    token = candidate;
-    // probe with /api/agents (also populates the dropdown)
+  // Exchange a token (+ optional 2FA code) for a session (also sets an httpOnly
+  // session cookie). Returns { token } | { needTotp } | { error }.
+  async function tokenLogin(tokenValue, totpCode) {
+    let res, data;
     try {
-      await loadAgents();
-      await loadProjects();
-    } catch (e) {
-      if (e.unauthorized) {
-        showGate("Invalid token.");
-        return false;
-      }
-      // network/other error — still proceed to WS; it has its own auth gate
-    }
-    try { sessionStorage.setItem("aab_token", token); } catch (_) {}
-    hideGate();
-    initTerminal();
-    connect();
-    return true;
+      res = await fetch("/api/auth/login", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenValue, totp: totpCode || undefined })
+      });
+      data = await res.json().catch(() => ({}));
+    } catch (e) { return { error: "Network error — is the server running?" }; }
+    if (res.status === 429) return { error: (data && data.message) || "Too many attempts. Try later." };
+    if (data && data.needTotp) return { needTotp: true };
+    if (data && data.ok && data.token) return { token: data.token };
+    return { error: (data && (data.reason || data.message)) || "Invalid token." };
   }
 
-  gateBtn.addEventListener("click", () => {
+  async function startSession() {
+    try { await loadAgents(); await loadProjects(); }
+    catch (e) { if (e.unauthorized) { showGate("Authentication failed."); return false; } }
+    hideGate(); initTerminal(); connect(); return true;
+  }
+
+  // Resume an existing cookie session (set by OAuth, or a prior token login).
+  async function cookieResume() {
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.ok) { token = null; return await startSession(); }
+    } catch (_) {}
+    return false;
+  }
+
+  async function submitToken() {
     const v = tokenInput.value.trim();
     if (!v) { gateErr.textContent = "Token required."; return; }
-    gateBtn.disabled = true;
-    authenticateAndStart(v).finally(() => { gateBtn.disabled = false; });
-  });
-  tokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") gateBtn.click(); });
+    const code = totpRow.style.display !== "none" ? totpInput.value.trim() : "";
+    gateBtn.disabled = true; gateErr.textContent = "";
+    const r = await tokenLogin(v, code);
+    gateBtn.disabled = false;
+    if (r.needTotp) {
+      totpRow.style.display = "";
+      gateMsg.textContent = "Two-factor required — enter your 6-digit code.";
+      setTimeout(() => totpInput.focus(), 30);
+      return;
+    }
+    if (r.error) { gateErr.textContent = r.error; return; }
+    token = r.token;
+    await startSession();
+  }
+
+  gateBtn.addEventListener("click", submitToken);
+  tokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitToken(); });
+  totpInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitToken(); });
+
+  function wireOauth(btn) {
+    btn.addEventListener("click", () => { window.location.href = "/api/auth/oauth/" + btn.dataset.provider + "/start"; });
+  }
+  wireOauth(oauthGoogle);
+  wireOauth(oauthGithub);
+
+  async function loadLoginConfig() {
+    try {
+      const res = await fetch("/api/auth/config", { credentials: "include" });
+      if (!res.ok) return;
+      const cfg = await res.json();
+      const o = (cfg.methods && cfg.methods.oauth) || {};
+      let any = false;
+      if (o.google) { oauthGoogle.style.display = ""; any = true; }
+      if (o.github) { oauthGithub.style.display = ""; any = true; }
+      if (any) oauthRow.style.display = "";
+    } catch (_) {}
+  }
 
   // ---------- Bootstrap ----------
-  (function boot() {
+  (async function boot() {
     const params = new URLSearchParams(location.search);
-    let t = params.get("token");
-    if (!t) { try { t = sessionStorage.getItem("aab_token"); } catch (_) {} }
+    const authError = params.get("auth_error");
 
+    await loadLoginConfig();
+
+    // 1) explicit ?token= bootstrap link from the server console
+    const t = params.get("token");
     if (t) {
-      // strip token from visible URL for tidiness
-      if (params.get("token")) {
-        params.delete("token");
-        const clean = location.pathname + (params.toString() ? "?" + params.toString() : "");
-        history.replaceState(null, "", clean);
+      params.delete("token");
+      history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params.toString() : ""));
+      tokenInput.value = t;
+      const r = await tokenLogin(t, "");
+      if (r.needTotp) {
+        showGate("");
+        totpRow.style.display = "";
+        gateMsg.textContent = "Two-factor required — enter your 6-digit code.";
+        setTimeout(() => totpInput.focus(), 30);
+        return;
       }
-      authenticateAndStart(t);
-    } else {
-      showGate("");
+      if (r.token) { token = r.token; await startSession(); return; }
+      showGate(r.error || "Invalid token.");
+      return;
     }
+
+    // 2) existing cookie session (OAuth return, or a remembered login)
+    if (await cookieResume()) {
+      if (authError) history.replaceState(null, "", location.pathname);
+      return;
+    }
+
+    // 3) otherwise, prompt
+    showGate(authError ? ("Login failed: " + authError) : "");
+    if (authError) history.replaceState(null, "", location.pathname);
   })();
 })();
 </script>

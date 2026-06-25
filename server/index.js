@@ -23,6 +23,7 @@ const os = require('os');
 const multer = require('multer');
 const crypto = require('crypto');
 const { createTunnelManager } = require('./tunnel');
+const { createAuthManager } = require('./auth');
 
 const ROOT = path.join(__dirname, '..');
 const HOME = os.homedir();
@@ -39,7 +40,20 @@ const DEFAULT_CONFIG = {
   host: '127.0.0.1',
   port: 3001,
   shell: null,
-  auth: { token: null },
+  auth: {
+    token: null,
+    sessionTtlHours: 12,
+    sessionSecret: null,
+    requireLogin: false,
+    totp: { enabled: true, issuer: 'AnyAgent Bridge', label: 'operator' },
+    oauth: {
+      enabled: false,
+      callbackBaseUrl: null,
+      claimFirstUser: true,
+      google: { clientId: null, clientSecret: null, allowedEmails: [] },
+      github: { clientId: null, clientSecret: null, allowedLogins: [] }
+    }
+  },
   agents: [
     { id: 'claude', name: 'Claude Code', command: 'claude' },
     { id: 'codex', name: 'Codex', command: 'codex' }
@@ -60,9 +74,19 @@ function loadConfig() {
       if (fs.existsSync(file)) {
         const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
         console.log(`[Config] Loaded ${path.basename(file)}`);
+        const pa = parsed.auth || {};
+        const po = pa.oauth || {};
         return {
           ...DEFAULT_CONFIG, ...parsed,
-          auth:   { ...DEFAULT_CONFIG.auth,   ...(parsed.auth   || {}) },
+          auth: {
+            ...DEFAULT_CONFIG.auth, ...pa,
+            totp:  { ...DEFAULT_CONFIG.auth.totp,  ...(pa.totp  || {}) },
+            oauth: {
+              ...DEFAULT_CONFIG.auth.oauth, ...po,
+              google: { ...DEFAULT_CONFIG.auth.oauth.google, ...(po.google || {}) },
+              github: { ...DEFAULT_CONFIG.auth.oauth.github, ...(po.github || {}) }
+            }
+          },
           tunnel: { ...DEFAULT_CONFIG.tunnel, ...(parsed.tunnel || {}) }
         };
       }
@@ -110,6 +134,25 @@ const CONFIG = {
       t['cloudflared-named'] = { ...(t['cloudflared-named'] || {}), hostname: process.env.BRIDGE_TUNNEL_HOSTNAME };
     }
     return t;
+  })(),
+  AUTH: (() => {
+    const a = JSON.parse(JSON.stringify(config.auth || {})); // deep copy; never mutate loaded config
+    const envBool = (v) => /^(1|true)$/i.test(String(v));
+    if (process.env.BRIDGE_REQUIRE_LOGIN !== undefined) a.requireLogin = envBool(process.env.BRIDGE_REQUIRE_LOGIN);
+    if (process.env.BRIDGE_SESSION_SECRET) a.sessionSecret = process.env.BRIDGE_SESSION_SECRET;
+    if (process.env.BRIDGE_SESSION_TTL_HOURS) a.sessionTtlHours = parseInt(process.env.BRIDGE_SESSION_TTL_HOURS, 10) || a.sessionTtlHours;
+    a.totp = a.totp || {};
+    if (process.env.BRIDGE_TOTP_ENABLED !== undefined) a.totp.enabled = envBool(process.env.BRIDGE_TOTP_ENABLED);
+    a.oauth = a.oauth || {};
+    a.oauth.google = a.oauth.google || {};
+    a.oauth.github = a.oauth.github || {};
+    if (process.env.BRIDGE_OAUTH_ENABLED !== undefined) a.oauth.enabled = envBool(process.env.BRIDGE_OAUTH_ENABLED);
+    if (process.env.BRIDGE_OAUTH_CALLBACK_URL) a.oauth.callbackBaseUrl = process.env.BRIDGE_OAUTH_CALLBACK_URL;
+    if (process.env.BRIDGE_GOOGLE_CLIENT_ID) a.oauth.google.clientId = process.env.BRIDGE_GOOGLE_CLIENT_ID;
+    if (process.env.BRIDGE_GOOGLE_CLIENT_SECRET) a.oauth.google.clientSecret = process.env.BRIDGE_GOOGLE_CLIENT_SECRET;
+    if (process.env.BRIDGE_GITHUB_CLIENT_ID) a.oauth.github.clientId = process.env.BRIDGE_GITHUB_CLIENT_ID;
+    if (process.env.BRIDGE_GITHUB_CLIENT_SECRET) a.oauth.github.clientSecret = process.env.BRIDGE_GITHUB_CLIENT_SECRET;
+    return a;
   })()
 };
 
@@ -164,7 +207,11 @@ const ALLOWED_BASE_PATHS = (Array.isArray(config.allowedPaths) && config.allowed
 // Sensitive directories denied even inside allowed bases (home-relative) plus the
 // app's own .data dir (holds the auth token). Additive defense only.
 const DENIED_PATHS = [
-  '.ssh', '.aws', '.gnupg', '.kube', path.join('.config', 'gcloud')
+  '.ssh', '.aws', '.gnupg', '.kube', path.join('.config', 'gcloud'),
+  // Common secret-bearing dotfiles: deny even though an authenticated user has a
+  // shell anyway — keeps the file API from being a quieter path to credentials.
+  '.env', '.npmrc', '.netrc', '.git-credentials',
+  path.join('.docker', 'config.json'), path.join('.config', 'gh'), path.join('.config', 'configstore')
 ].map(seg => path.resolve(HOME, seg));
 DENIED_PATHS.push(path.resolve(DATA_DIR));
 
@@ -248,14 +295,27 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
-/** Auth middleware: header X-Auth-Token / Bearer / ?token must equal AUTH_TOKEN. */
+// Stage 3: auth manager (signed sessions + TOTP 2FA + Google/GitHub OAuth),
+// layered on top of the Stage 1 static token. When OAuth is off, no TOTP is
+// enrolled, and requireLogin is false, this is a no-op and the static token
+// works everywhere exactly as in Stage 2.
+const auth = createAuthManager(CONFIG.AUTH, {
+  logger: console,
+  dataDir: DATA_DIR,
+  staticToken: AUTH_TOKEN,
+  safeEqual,
+  getClientIP,
+  rateLimit: { check: checkLoginRateLimit, record: recordLoginAttempt }
+});
+
+/**
+ * Auth middleware. Accepts the static token (when direct access is allowed) OR a
+ * valid signed session presented via cookie / Bearer / X-Session-Token / ?token /
+ * ?session. On success sets req.principal = {type:'token'} | {type:'session',...}.
+ */
 function requireAuth(req, res, next) {
-  const provided = req.headers['x-auth-token'] ||
-                   req.headers['authorization']?.replace('Bearer ', '') ||
-                   req.query.token;
-  if (provided && safeEqual(provided, AUTH_TOKEN)) {
-    return next();
-  }
+  const principal = auth.resolvePrincipal(req);
+  if (principal) { req.principal = principal; return next(); }
   return res.status(401).json({ error: 'Authentication required' });
 }
 
@@ -284,6 +344,34 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+// Stage 3: parse the Cookie header into req.cookies (no dependency) so the auth
+// middleware can read the session cookie.
+app.use((req, res, next) => { req.cookies = auth.parseCookies(req.headers.cookie); next(); });
+
+// Stage 3: CSRF defense-in-depth. The session cookie is SameSite=Lax, which
+// already blocks it from riding cross-site writes; this additionally rejects any
+// state-changing request that carries the session cookie with a cross-origin
+// Origin header. Token/Bearer clients (curl, the default-mode UI) send no cookie
+// and are unaffected — a bearer credential is not CSRF-able.
+app.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  if (!(req.cookies && req.cookies['aab_session'])) return next();
+  const origin = req.headers.origin;
+  if (!origin) return next(); // non-browser client, or same-origin without Origin
+  try {
+    const reqHost = req.headers['x-forwarded-host'] || req.headers.host;
+    if (new URL(origin).host !== reqHost) {
+      return res.status(403).json({ error: 'Cross-origin request blocked' });
+    }
+  } catch (e) {
+    return res.status(403).json({ error: 'Invalid Origin header' });
+  }
+  next();
+});
+
+// Mount /api/auth/* routes (login, OAuth, TOTP, sessions).
+auth.registerRoutes(app, { requireAuth });
 
 // Static client (no caching so updates are picked up immediately).
 app.use(express.static(path.join(ROOT, 'client'), {
@@ -756,6 +844,7 @@ app.get('/api/system/status', requireAuth, (req, res) => {
       sessions: sessions.size
     },
     tunnel: tunnel.getStatus(), // null when idle/disabled → Stage-1 shape preserved
+    auth: auth.getStatus(),     // Stage 3: login policy + active session count (no secrets)
     system: {
       platform: process.platform,
       shell: CONFIG.SHELL,
@@ -787,27 +876,9 @@ app.post('/api/tunnel/restart', requireAuth, (req, res) => {
   res.json(tunnel.getStatus() || { state: 'idle', provider: null, url: null });
 });
 
-// Local auth: exchange the access token for itself (token-as-password). The
-// client posts the token; on match it gets it back. Rate limited. Stage 3 will
-// replace this with OAuth.
-app.post('/api/auth/verify-local', (req, res) => {
-  const provided = req.body?.token || req.body?.password;
-  const clientIP = getClientIP(req);
-
-  if (!checkLoginRateLimit(clientIP)) {
-    console.warn(`[Auth] Rate limit exceeded for IP: ${clientIP}`);
-    return res.status(429).json({ success: false, message: 'Too many login attempts. Try again later.' });
-  }
-
-  if (provided && safeEqual(provided, AUTH_TOKEN)) {
-    recordLoginAttempt(clientIP, true);
-    console.log(`[Auth] Successful login from IP: ${clientIP}`);
-    return res.json({ success: true, token: AUTH_TOKEN });
-  }
-  recordLoginAttempt(clientIP, false);
-  console.warn(`[Auth] Failed login attempt from IP: ${clientIP}`);
-  res.json({ success: false, message: 'Invalid token' });
-});
+// Note: POST /api/auth/verify-local (token login) is now registered by the auth
+// manager (server/auth) alongside the rest of /api/auth/*, with 2FA enforcement
+// when a TOTP secret is enrolled. The response shape is unchanged when 2FA is off.
 
 app.post('/api/upload-image', requireAuth, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -1298,18 +1369,19 @@ wss.on('connection', (ws, req) => {
   ws._lastMessageAt = Date.now();
   try { req.socket.setKeepAlive(true, 30000); req.socket.setNoDelay(true); } catch (e) {}
 
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const authToken = url.searchParams.get('token');
   const clientIP = getClientIP(req);
 
-  if (!authToken || !safeEqual(authToken, AUTH_TOKEN)) {
+  // Stage 3: accept the static token (when direct access is allowed) OR a valid
+  // session via ?session=, ?token=, or the session cookie sent on the upgrade.
+  const principal = auth.verifyWs(req);
+  if (!principal) {
     console.warn(`[WebSocket] Rejected unauthenticated connection from ${clientIP}`);
     try { ws.send(JSON.stringify({ type: 'error', message: 'Authentication required' })); } catch (e) {}
     ws.close(4001, 'Authentication required');
     return;
   }
 
-  console.log(`[WebSocket] Authenticated connection from ${clientIP}`);
+  console.log(`[WebSocket] Authenticated connection from ${clientIP} (${principal.type})`);
 
   let currentSession = null;
   let heartbeatInterval = null;
@@ -1482,6 +1554,30 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
     console.log('  network/internet. The access token is the ONLY gate. Anyone');
     console.log('  with the token gets full terminal + file access. Stage 1 has');
     console.log('  no tunnel/TLS; do not expose this publicly without a proxy.');
+  }
+  // Stage 3: summarize active login policy. Silent (byte-identical to Stage 2)
+  // when OAuth is off, no TOTP is enrolled, and requireLogin is false.
+  if (auth.isEnhanced()) {
+    const st = auth.getStatus();
+    const methods = [];
+    if (st.oauth.enabled) {
+      const provs = Object.entries(st.oauth.providers).filter(([, on]) => on).map(([id]) => id);
+      methods.push(`oauth(${provs.join(',') || 'none configured'})`);
+    }
+    if (st.totp.confirmed) methods.push('token+2FA');
+    else methods.push('token');
+    console.log('---------------------------------------------------------------');
+    console.log(`  Login:     ${methods.join(', ')}`);
+    console.log(`  Token:     ${st.tokenDirectAccess ? 'direct access enabled' : 'login-only (must exchange for a session)'}`);
+    if (st.requireLogin) console.log('  requireLogin: on (static token cannot be used directly)');
+    // Behind a tunnel the OAuth redirect_uri is derived from request headers
+    // (Host/X-Forwarded-Host) unless pinned. Warn so logins don't silently break
+    // or trust a spoofable host.
+    if (st.oauth.enabled && !CONFIG.AUTH.oauth.callbackBaseUrl) {
+      console.log('  WARNING:   OAuth is on but auth.oauth.callbackBaseUrl is unset — the redirect URI');
+      console.log('             will be derived from request headers. Set it to your public URL');
+      console.log('             (e.g. your tunnel URL) for reliable, non-spoofable callbacks.');
+    }
   }
   console.log('===============================================================');
 

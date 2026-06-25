@@ -18,6 +18,7 @@ Control your local computer's terminal — and **any** CLI AI coding agent you'v
 - File management API: browse, read, write, rename, move, delete, upload, download — all behind a path whitelist.
 - Crash guards (uncaught exceptions, signals) so the server stays up.
 - Constant-time token comparison and basic rate limiting.
+- Optional **login**: Google/GitHub OAuth, TOTP 2FA, and signed expiring sessions on top of the token (Stage 3).
 
 ## Requirements
 
@@ -126,20 +127,67 @@ Inspect and control the tunnel at runtime (all require the access token):
 
 The boot banner prints the public URL once the tunnel is ready. **A public tunnel
 makes your access token the only thing between the internet and your terminal** —
-keep it secret. Per-user login (OAuth + 2FA) arrives in Stage 3.
+keep it secret, or add a login (next section).
+
+## Login & accounts (Stage 3)
+
+On top of the static token you can require a real login. Everything here is
+**opt-in**: with OAuth off, no 2FA enrolled, and `requireLogin` false, the bridge
+behaves exactly as before (the token works directly). No new npm dependencies.
+
+**The one rule:** the static token is a *direct* credential **unless** you set
+`requireLogin` or enroll 2FA — then it becomes *login-only* (you exchange it, with
+your 2FA code, for a session). That is what makes 2FA actually protective. Logins
+mint a signed, expiring session delivered as an httpOnly cookie.
+
+**Two-factor (TOTP).** Once authenticated, enroll from the API: `POST /api/auth/totp/setup`
+returns an `otpauth://` URI to scan with Google Authenticator / 1Password / Authy,
+then `POST /api/auth/totp/confirm` with a code activates it and returns one-time
+recovery codes (store them). Enrolling 2FA flips the token to login-only.
+
+**OAuth (Google / GitHub).** Register an OAuth app with each provider, then set
+the client id/secret (in env, not committed config) and enable it:
+
+```json
+{
+  "auth": {
+    "requireLogin": false,
+    "oauth": {
+      "enabled": true,
+      "callbackBaseUrl": "https://your-tunnel.example",
+      "claimFirstUser": true,
+      "google": { "clientId": "…", "clientSecret": "…", "allowedEmails": ["you@gmail.com"] },
+      "github": { "clientId": "…", "clientSecret": "…", "allowedLogins": ["yourlogin"] }
+    }
+  }
+}
+```
+
+Set each provider's callback to `<callbackBaseUrl>/api/auth/oauth/<provider>/callback`.
+The allowlist (`allowedEmails` / `allowedLogins`) is **fail-closed** — an empty
+allowlist admits no one, unless `claimFirstUser` is on, in which case the **first**
+successful login claims the bridge and everyone else is denied (so don't expose a
+fresh, unclaimed bridge publicly). Always set `callbackBaseUrl` when OAuth is
+reachable, so the redirect URI is not derived from request headers.
+
+Login endpoints (all under `/api/auth`): `POST /login` · `POST /logout` ·
+`GET /config` · `GET /me` · `GET /sessions` · `DELETE /sessions/:id` ·
+`GET /oauth/:provider/{start,callback}` · `POST /totp/{setup,confirm,disable}`.
+Configure it all via the `auth` block in `config.json` or `BRIDGE_*` env vars
+(see `.env.example`).
 
 ## Security notes
 
 - **Localhost by default.** Out of the box the server binds `127.0.0.1`, so only your own machine can reach it.
 - **The token is the gate.** There is no default password and no default token — one is generated on first boot and persisted to `.data/auth.json`. Keep it secret. If you set `host` to `0.0.0.0`, the token is the *only* thing standing between the internet (or your LAN) and your terminal — the server warns you about this at boot.
 - **No credential injection.** The bridge runs your registered command and nothing more; your AI CLI's own login is used as-is.
-- **Safe remote access is staged.** Exposing this beyond localhost the right way — free tunnels (Stage 2), OAuth + 2FA (Stage 3), and Docker sandboxing (Stage 4) — is on the roadmap. Until then, prefer localhost or a trusted network. See [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Add a login before exposing it.** Free tunnels (Stage 2) and OAuth + 2FA login (Stage 3, see [Login & accounts](#login--accounts-stage-3)) are shipped; Docker sandboxing (Stage 4) is next. If you expose the bridge, require a login and set `callbackBaseUrl`; prefer localhost or a trusted network otherwise. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Roadmap
 
 - **Stage 1 (this release)** — portable, cross-platform core: terminal + any-agent control over WebSocket, file API, persistent sessions, token auth.
 - **Stage 2 (this release)** — free tunnel adapters (Dev Tunnels, Cloudflare, Tailscale, cloudflared) for zero-config remote access. See [Remote access](#remote-access-stage-2).
-- **Stage 3** — OAuth (Google/GitHub) + 2FA + real session management.
+- **Stage 3 (this release)** — OAuth (Google/GitHub) + 2FA + real session management. See [Login & accounts](#login--accounts-stage-3).
 - **Stage 4** — Docker sandboxing, kill-switch, audit logging, secret redaction.
 - **Stage 5** — packaging (npx / docker-compose), cross-platform docs, and screenshots.
 

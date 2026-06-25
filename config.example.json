@@ -2,7 +2,20 @@
   "host": "127.0.0.1",
   "port": 3001,
   "shell": null,
-  "auth": { "token": null },
+  "auth": {
+    "token": null,
+    "sessionTtlHours": 12,
+    "sessionSecret": null,
+    "requireLogin": false,
+    "totp": { "enabled": true, "issuer": "AnyAgent Bridge", "label": "operator" },
+    "oauth": {
+      "enabled": false,
+      "callbackBaseUrl": null,
+      "claimFirstUser": true,
+      "google": { "clientId": null, "clientSecret": null, "allowedEmails": [] },
+      "github": { "clientId": null, "clientSecret": null, "allowedLogins": [] }
+    }
+  },
   "agents": [
     { "id": "claude", "name": "Claude Code", "command": "claude" },
     { "id": "codex", "name": "Codex", "command": "codex" }
