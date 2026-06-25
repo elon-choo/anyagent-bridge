@@ -18,14 +18,24 @@ The "it works" core, with nothing macOS- or person-specific:
 - Token auth with constant-time comparison and a rate-limiting structure.
 - Cross-platform shell selection and plain `fs.*` file access (no platform-specific brokers).
 
-## Stage 2 — Free tunnel adapters
+## Stage 2 — Free tunnel adapters ✅
 
-Zero-/low-config remote access without paying for anything, via pluggable adapters:
+Zero-/low-config remote access without paying for anything, via pluggable
+adapters spawned as external CLIs (no new npm dependencies). Disabled by default;
+when off, missing, or misconfigured the server runs exactly like Stage 1
+(localhost-only) and never crashes.
 
-- **Microsoft Dev Tunnels** (default).
-- **Cloudflare Quick Tunnel** (ephemeral, no account).
-- **Tailscale** (private mesh).
-- **cloudflared named tunnel** (stable custom hostname).
+- **Microsoft Dev Tunnels** (default) — one-time `devtunnel user login`; the URL rotates per run unless you pre-create a tunnel (`tunnelId`).
+- **Cloudflare Quick Tunnel** (`cloudflare-quick`) — no account; ephemeral `*.trycloudflare.com` URL; testing-grade (≈200 req cap, no SSE).
+- **Tailscale** (`tailscale`) — needs `tailscale up` + Funnel enabled in the tailnet ACL; stable `*.ts.net` URL; may need sudo.
+- **cloudflared named tunnel** (`cloudflared-named`) — needs a Cloudflare account + zone, a pre-created tunnel and DNS route; stable custom hostname.
+
+Config: the `tunnel` block in `config.json` (default `enabled:false`,
+`provider:"devtunnel"`). Env overrides: `BRIDGE_TUNNEL_ENABLED`,
+`BRIDGE_TUNNEL_PROVIDER`, `BRIDGE_TUNNEL_HOSTNAME`. Control at runtime:
+`GET|POST /api/tunnel/{status,start,stop,restart}`. Add a 5th provider by
+dropping an adapter under `server/tunnel/adapters/` and registering it in
+`server/tunnel/registry.js`.
 
 ## Stage 3 — Authentication & sessions
 

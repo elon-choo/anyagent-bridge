@@ -86,6 +86,48 @@ Access token: 9f3c...  (saved to .data/auth.json)
 
 Open that URL in a browser and provide the token when prompted.
 
+## Remote access (Stage 2)
+
+To reach the bridge from your phone or another machine, enable a **tunnel**. Each
+provider is just an external CLI you install yourself — anyagent-bridge spawns it,
+no new npm dependencies and no credentials stored. Tunnels are **off by default**;
+when disabled, missing, or misconfigured the server runs exactly as before
+(localhost-only) and never crashes.
+
+| Provider (`provider` id) | CLI | Account? | URL | One-time setup |
+|---|---|---|---|---|
+| Microsoft Dev Tunnels (`devtunnel`, default) | `devtunnel` | yes | rotates per run (stable with a pre-created `tunnelId`) | `devtunnel user login` |
+| Cloudflare Quick (`cloudflare-quick`) | `cloudflared` | no | ephemeral `*.trycloudflare.com` | none — testing-grade (≈200 req cap, no SSE) |
+| Tailscale Funnel (`tailscale`) | `tailscale` | yes | stable `*.ts.net` | `tailscale up` + enable Funnel in the tailnet ACL |
+| cloudflared named (`cloudflared-named`) | `cloudflared` | yes | stable custom hostname | `cloudflared tunnel login` → `tunnel create` → `tunnel route dns` |
+
+Enable it in `config.json`:
+
+```json
+{
+  "tunnel": {
+    "enabled": true,
+    "provider": "devtunnel",
+    "cloudflared-named": { "tunnelName": "my-tunnel", "hostname": "bridge.example.com" }
+  }
+}
+```
+
+Or via environment variables (override `config.json`):
+
+- `BRIDGE_TUNNEL_ENABLED` — `true`/`1` to enable.
+- `BRIDGE_TUNNEL_PROVIDER` — one of the ids above.
+- `BRIDGE_TUNNEL_HOSTNAME` — public hostname for the `cloudflared-named` provider.
+
+Inspect and control the tunnel at runtime (all require the access token):
+
+- `GET /api/tunnel/status` — current state, provider, and public URL.
+- `POST /api/tunnel/start` · `POST /api/tunnel/stop` · `POST /api/tunnel/restart`.
+
+The boot banner prints the public URL once the tunnel is ready. **A public tunnel
+makes your access token the only thing between the internet and your terminal** —
+keep it secret. Per-user login (OAuth + 2FA) arrives in Stage 3.
+
 ## Security notes
 
 - **Localhost by default.** Out of the box the server binds `127.0.0.1`, so only your own machine can reach it.
@@ -96,7 +138,7 @@ Open that URL in a browser and provide the token when prompted.
 ## Roadmap
 
 - **Stage 1 (this release)** — portable, cross-platform core: terminal + any-agent control over WebSocket, file API, persistent sessions, token auth.
-- **Stage 2** — free tunnel adapters for zero-config remote access.
+- **Stage 2 (this release)** — free tunnel adapters (Dev Tunnels, Cloudflare, Tailscale, cloudflared) for zero-config remote access. See [Remote access](#remote-access-stage-2).
 - **Stage 3** — OAuth (Google/GitHub) + 2FA + real session management.
 - **Stage 4** — Docker sandboxing, kill-switch, audit logging, secret redaction.
 - **Stage 5** — packaging (npx / docker-compose), cross-platform docs, and screenshots.

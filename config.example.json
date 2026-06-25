@@ -9,5 +9,17 @@
   ],
   "projects": [],
   "allowedPaths": [],
-  "sessionTimeoutDays": 7
+  "sessionTimeoutDays": 7,
+  "tunnel": {
+    "enabled": false,
+    "provider": "devtunnel",
+    "urlTimeoutMs": 30000,
+    "killGraceMs": 4000,
+    "restart": { "maxPerWindow": 5, "windowMs": 10000, "backoffMs": 5000, "backoffMaxMs": 60000 },
+
+    "devtunnel": { "tunnelId": null, "allowAnonymous": true, "extraArgs": [] },
+    "cloudflare-quick": { "extraArgs": [] },
+    "tailscale": { "extraArgs": [] },
+    "cloudflared-named": { "tunnelName": null, "hostname": null, "extraArgs": [] }
+  }
 }

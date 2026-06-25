@@ -22,6 +22,7 @@ const fs = require('fs');
 const os = require('os');
 const multer = require('multer');
 const crypto = require('crypto');
+const { createTunnelManager } = require('./tunnel');
 
 const ROOT = path.join(__dirname, '..');
 const HOME = os.homedir();
@@ -45,7 +46,8 @@ const DEFAULT_CONFIG = {
   ],
   projects: [],
   allowedPaths: [],
-  sessionTimeoutDays: 7
+  sessionTimeoutDays: 7,
+  tunnel: { enabled: false, provider: 'devtunnel' }
 };
 
 function loadConfig() {
@@ -58,7 +60,11 @@ function loadConfig() {
       if (fs.existsSync(file)) {
         const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
         console.log(`[Config] Loaded ${path.basename(file)}`);
-        return { ...DEFAULT_CONFIG, ...parsed, auth: { ...DEFAULT_CONFIG.auth, ...(parsed.auth || {}) } };
+        return {
+          ...DEFAULT_CONFIG, ...parsed,
+          auth:   { ...DEFAULT_CONFIG.auth,   ...(parsed.auth   || {}) },
+          tunnel: { ...DEFAULT_CONFIG.tunnel, ...(parsed.tunnel || {}) }
+        };
       }
     } catch (e) {
       console.error(`[Config] Failed to parse ${path.basename(file)}: ${e.message}`);
@@ -93,7 +99,18 @@ const CONFIG = {
   SESSION_TIMEOUT: (config.sessionTimeoutDays || 7) * 24 * 60 * 60 * 1000,
   SCROLLBACK_LIMIT: 10000,
   SESSION_SAVE_PATH: path.join(ROOT, 'sessions.json'),
-  AUTH_FILE: path.join(DATA_DIR, 'auth.json')
+  AUTH_FILE: path.join(DATA_DIR, 'auth.json'),
+  TUNNEL: (() => {
+    const t = { ...config.tunnel };
+    t.enabled = process.env.BRIDGE_TUNNEL_ENABLED === undefined
+      ? !!config.tunnel.enabled
+      : /^(1|true)$/i.test(process.env.BRIDGE_TUNNEL_ENABLED);
+    t.provider = process.env.BRIDGE_TUNNEL_PROVIDER || config.tunnel.provider || 'devtunnel';
+    if (process.env.BRIDGE_TUNNEL_HOSTNAME) {
+      t['cloudflared-named'] = { ...(t['cloudflared-named'] || {}), hostname: process.env.BRIDGE_TUNNEL_HOSTNAME };
+    }
+    return t;
+  })()
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -131,6 +148,9 @@ function loadOrCreateAuthToken() {
 }
 
 const { token: AUTH_TOKEN, source: AUTH_TOKEN_SOURCE } = loadOrCreateAuthToken();
+
+// Stage 2: tunnel manager (created idle; started after server.listen if enabled).
+const tunnel = createTunnelManager(CONFIG.TUNNEL, console);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Security: path whitelist + rate limiting helpers
@@ -735,13 +755,36 @@ app.get('/api/system/status', requireAuth, (req, res) => {
       uptime: process.uptime(),
       sessions: sessions.size
     },
-    tunnel: null, // Stage 2 seam: tunnel info goes here.
+    tunnel: tunnel.getStatus(), // null when idle/disabled → Stage-1 shape preserved
     system: {
       platform: process.platform,
       shell: CONFIG.SHELL,
       home: HOME
     }
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tunnel control (Stage 2). All behind requireAuth; never throw to the client.
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get('/api/tunnel/status', requireAuth, (req, res) => {
+  res.json(tunnel.getStatus() || { state: 'idle', provider: null, url: null });
+});
+
+app.post('/api/tunnel/start', requireAuth, (req, res) => {
+  tunnel.start(CONFIG.PORT); // idempotent; no-op if disabled or already running
+  res.json(tunnel.getStatus() || { state: 'idle', provider: null, url: null });
+});
+
+app.post('/api/tunnel/stop', requireAuth, async (req, res) => {
+  await tunnel.stop(); // idempotent; safe if never started
+  res.json(tunnel.getStatus() || { state: 'stopped', provider: null, url: null });
+});
+
+app.post('/api/tunnel/restart', requireAuth, (req, res) => {
+  tunnel.restart();
+  res.json(tunnel.getStatus() || { state: 'idle', provider: null, url: null });
 });
 
 // Local auth: exchange the access token for itself (token-as-password). The
@@ -1406,7 +1449,13 @@ function shutdown(signal) {
   console.log(`\n[Server] Shutting down (${signal})...`);
   saveSessions();
   sessions.forEach(session => session.destroy());
-  process.exit(0);
+  // Stop the tunnel child too, but never let a hung CLI block exit.
+  const hardExit = setTimeout(() => process.exit(0), 3000);
+  if (hardExit.unref) hardExit.unref();
+  Promise.resolve(tunnel.stop()).catch(() => {}).finally(() => {
+    clearTimeout(hardExit);
+    process.exit(0);
+  });
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -1435,4 +1484,19 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
     console.log('  no tunnel/TLS; do not expose this publicly without a proxy.');
   }
   console.log('===============================================================');
+
+  // Stage 2: start the configured tunnel AFTER the local server is up. The URL
+  // arrives asynchronously and never delays listen(). When disabled, the banner
+  // above is byte-identical to Stage 1.
+  if (CONFIG.TUNNEL && CONFIG.TUNNEL.enabled) {
+    console.log(`  Tunnel:    ${CONFIG.TUNNEL.provider} (starting...)`);
+    tunnel.once('ready', (s) => {
+      if (s && s.url) console.log(`  Tunnel:    ${s.url}  (${s.provider})`);
+      else console.log(`  Tunnel:    ${s.provider} connected (no public URL to display)`);
+    });
+    tunnel.on('state', (s) => {
+      if (s && s.state === 'error') console.warn(`  Tunnel:    error — ${s.lastError || 'unavailable'}`);
+    });
+    tunnel.start(CONFIG.PORT);
+  }
 });
