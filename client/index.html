@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0d1117" />
+<title>AnyAgent Bridge</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+<style>
+  :root {
+    --bg: #0d1117;
+    --bar: #161b22;
+    --border: #30363d;
+    --fg: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+  #app { display: flex; flex-direction: column; height: 100dvh; }
+
+  #bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    background: var(--bar);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+  }
+  #bar .title {
+    font-weight: 600; font-size: 14px; letter-spacing: .2px;
+    margin-right: 4px; white-space: nowrap;
+  }
+  #bar .title .dot { color: var(--accent); }
+  select, button, input {
+    font-family: inherit; font-size: 13px;
+    background: #0d1117; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 9px; outline: none;
+  }
+  select:focus, button:focus, input:focus { border-color: var(--accent); }
+  button {
+    cursor: pointer; background: #21262d; transition: background .15s, border-color .15s;
+  }
+  button:hover { background: #30363d; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { background: #4493f8; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .spacer { flex: 1 1 auto; }
+
+  #status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted); white-space: nowrap;
+  }
+  #status .led {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--muted); box-shadow: 0 0 0 0 rgba(0,0,0,0);
+  }
+  #status.connected .led { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  #status.connecting .led { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  #status.disconnected .led { background: var(--red); }
+
+  #termwrap {
+    flex: 1 1 auto; position: relative;
+    padding: 6px 4px 4px 8px; min-height: 0;
+    background: var(--bg);
+  }
+  #terminal { width: 100%; height: 100%; }
+
+  /* Token gate overlay */
+  #gate {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(13,17,23,.96);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #gate .card {
+    background: var(--bar); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; width: 100%; max-width: 380px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  #gate h1 { margin: 0 0 4px; font-size: 18px; }
+  #gate h1 .dot { color: var(--accent); }
+  #gate p { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  #gate label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  #gate input { width: 100%; margin-bottom: 12px; }
+  #gate button { width: 100%; }
+  #gate .err { color: var(--red); font-size: 12px; margin: 0 0 10px; min-height: 16px; }
+
+  @media (max-width: 640px) {
+    #bar .title { width: 100%; margin-bottom: 2px; }
+    select, button, input { font-size: 12px; padding: 7px 9px; }
+    #status { margin-left: auto; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <span class="title">AnyAgent<span class="dot">·</span>Bridge</span>
+    <select id="agentSel" title="Agent"></select>
+    <button id="startBtn">Start</button>
+    <select id="projectSel" title="Project" style="display:none"></select>
+    <span class="spacer"></span>
+    <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
+  </div>
+  <div id="termwrap"><div id="terminal"></div></div>
+</div>
+
+<div id="gate">
+  <div class="card">
+    <h1>AnyAgent<span class="dot">·</span>Bridge</h1>
+    <p>Enter the access token printed in the server console to connect.</p>
+    <p class="err" id="gateErr"></p>
+    <label for="tokenInput">Access token</label>
+    <input id="tokenInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="paste token…" />
+    <button class="primary" id="gateBtn">Connect</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+  const gate = $("gate"), gateBtn = $("gateBtn"), gateErr = $("gateErr"), tokenInput = $("tokenInput");
+  const agentSel = $("agentSel"), startBtn = $("startBtn"), projectSel = $("projectSel");
+  const statusEl = $("status"), statusText = $("statusText");
+
+  // ---------- State ----------
+  let token = null;
+  let ws = null;
+  let term = null;
+  let fitAddon = null;
+  let connected = false;
+  let manualClose = false;
+  let reconnectTimer = null;
+  let reconnectDelay = 1000;        // backoff base
+  const MAX_RECONNECT_DELAY = 15000;
+  let pingTimer = null;
+
+  // ---------- Status UI ----------
+  function setStatus(state, text) {
+    statusEl.className = state;
+    statusText.textContent = text || state;
+  }
+
+  // ---------- Terminal ----------
+  function initTerminal() {
+    if (term) return;
+    term = new Terminal({
+      cursorBlink: true,
+      fontFamily: 'Menlo, Monaco, "Cascadia Code", "Courier New", monospace',
+      fontSize: window.innerWidth < 640 ? 12 : 13,
+      scrollback: 10000,
+      theme: {
+        background: "#0d1117",
+        foreground: "#c9d1d9",
+        cursor: "#2f81f7",
+        cursorAccent: "#0d1117",
+        selectionBackground: "#264f78",
+        black: "#484f58", red: "#ff7b72", green: "#3fb950", yellow: "#d29922",
+        blue: "#58a6ff", magenta: "#bc8cff", cyan: "#39c5cf", white: "#b1bac4",
+        brightBlack: "#6e7681", brightRed: "#ffa198", brightGreen: "#56d364",
+        brightYellow: "#e3b341", brightBlue: "#79c0ff", brightMagenta: "#d2a8ff",
+        brightCyan: "#56d4dd", brightWhite: "#f0f6fc"
+      }
+    });
+    fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open($("terminal"));
+    safeFit();
+
+    // keystrokes -> server
+    term.onData((data) => {
+      send({ type: "input", data });
+    });
+
+    window.addEventListener("resize", onResize, { passive: true });
+    // Some mobile browsers need a delayed refit after the keyboard toggles
+    window.addEventListener("orientationchange", () => setTimeout(onResize, 300));
+  }
+
+  function safeFit() {
+    try { fitAddon && fitAddon.fit(); } catch (_) {}
+  }
+
+  let resizeRaf = null;
+  function onResize() {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      safeFit();
+      if (connected && term) {
+        send({ type: "resize", cols: term.cols, rows: term.rows });
+      }
+    });
+  }
+
+  // ---------- WebSocket ----------
+  function wsUrl() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`;
+  }
+
+  function connect() {
+    clearTimeout(reconnectTimer);
+    manualClose = false;
+    setStatus("connecting", "connecting…");
+
+    try {
+      ws = new WebSocket(wsUrl());
+    } catch (e) {
+      scheduleReconnect();
+      return;
+    }
+
+    ws.onopen = () => {
+      connected = true;
+      reconnectDelay = 1000;
+      setStatus("connected", "connected");
+      // initialize PTY with current geometry
+      send({ type: "init", cols: term ? term.cols : 80, rows: term ? term.rows : 24 });
+      startPing();
+    };
+
+    ws.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch (_) { return; }
+      handle(msg);
+    };
+
+    ws.onclose = (ev) => {
+      connected = false;
+      stopPing();
+      if (manualClose) { setStatus("disconnected", "disconnected"); return; }
+      // 1008 / 4401-style auth failures: surface to the gate
+      if (ev.code === 1008 || ev.code === 4401) {
+        showGate("Authentication failed — check the token.");
+        return;
+      }
+      setStatus("disconnected", "reconnecting…");
+      scheduleReconnect();
+    };
+
+    ws.onerror = () => {
+      // onclose will follow; just reflect state
+      if (!connected) setStatus("disconnected", "connection error");
+    };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      if (!manualClose) connect();
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 1.7, MAX_RECONNECT_DELAY);
+  }
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+      return true;
+    }
+    return false;
+  }
+
+  function startPing() {
+    stopPing();
+    pingTimer = setInterval(() => send({ type: "ping" }), 25000);
+  }
+  function stopPing() {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+  }
+
+  // ---------- Server -> client messages ----------
+  function handle(msg) {
+    switch (msg.type) {
+      case "ready":
+        // session established; nothing required, but resync size
+        if (connected && term) send({ type: "resize", cols: term.cols, rows: term.rows });
+        break;
+      case "output":
+        if (term && typeof msg.data === "string") term.write(msg.data);
+        break;
+      case "exit":
+        if (term) term.write("\r\n\x1b[33m[process exited]\x1b[0m\r\n");
+        break;
+      case "pong":
+        break;
+      case "error":
+        if (term) term.write(`\r\n\x1b[31m[error] ${msg.message || ""}\x1b[0m\r\n`);
+        if (/auth/i.test(msg.message || "")) showGate(msg.message);
+        break;
+      default:
+        // ignore unknown (forward-compat: detached, etc.)
+        break;
+    }
+  }
+
+  // ---------- REST: agents + projects ----------
+  async function api(path) {
+    const res = await fetch(path, { headers: { Authorization: "Bearer " + token } });
+    if (res.status === 401 || res.status === 403) {
+      const err = new Error("unauthorized"); err.unauthorized = true; throw err;
+    }
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+
+  async function loadAgents() {
+    let list = [];
+    try {
+      const data = await api("/api/agents");
+      list = Array.isArray(data) ? data : (data.agents || []);
+    } catch (e) {
+      if (e.unauthorized) throw e;
+      // leave empty; Start disabled
+    }
+    agentSel.innerHTML = "";
+    if (!list.length) {
+      const opt = document.createElement("option");
+      opt.textContent = "(no agents)"; opt.value = "";
+      agentSel.appendChild(opt);
+      startBtn.disabled = true;
+      return;
+    }
+    startBtn.disabled = false;
+    for (const a of list) {
+      const opt = document.createElement("option");
+      opt.value = a.id;
+      opt.textContent = a.name || a.id;
+      agentSel.appendChild(opt);
+    }
+  }
+
+  async function loadProjects() {
+    let list = [];
+    try {
+      const data = await api("/api/projects");
+      list = Array.isArray(data) ? data : (data.projects || []);
+    } catch (e) {
+      if (e.unauthorized) throw e;
+    }
+    if (!list.length) { projectSel.style.display = "none"; return; }
+    projectSel.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = ""; none.textContent = "Project…";
+    projectSel.appendChild(none);
+    for (const p of list) {
+      const opt = document.createElement("option");
+      opt.value = p.path || p.name || "";
+      opt.textContent = p.name || p.path || "project";
+      projectSel.appendChild(opt);
+    }
+    projectSel.style.display = "";
+  }
+
+  // ---------- Start agent ----------
+  startBtn.addEventListener("click", () => {
+    const agentId = agentSel.value;
+    if (!agentId) return;
+    send({ type: "startAgent", agentId });
+    if (term) term.focus();
+  });
+
+  // ---------- Token gate ----------
+  function showGate(errMsg) {
+    setStatus("disconnected", "disconnected");
+    manualClose = true;
+    if (ws) { try { ws.close(); } catch (_) {} ws = null; }
+    gateErr.textContent = errMsg || "";
+    gate.style.display = "flex";
+    tokenInput.value = token || "";
+    setTimeout(() => tokenInput.focus(), 50);
+  }
+
+  function hideGate() { gate.style.display = "none"; }
+
+  async function authenticateAndStart(candidate) {
+    token = candidate;
+    // probe with /api/agents (also populates the dropdown)
+    try {
+      await loadAgents();
+      await loadProjects();
+    } catch (e) {
+      if (e.unauthorized) {
+        showGate("Invalid token.");
+        return false;
+      }
+      // network/other error — still proceed to WS; it has its own auth gate
+    }
+    try { sessionStorage.setItem("aab_token", token); } catch (_) {}
+    hideGate();
+    initTerminal();
+    connect();
+    return true;
+  }
+
+  gateBtn.addEventListener("click", () => {
+    const v = tokenInput.value.trim();
+    if (!v) { gateErr.textContent = "Token required."; return; }
+    gateBtn.disabled = true;
+    authenticateAndStart(v).finally(() => { gateBtn.disabled = false; });
+  });
+  tokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") gateBtn.click(); });
+
+  // ---------- Bootstrap ----------
+  (function boot() {
+    const params = new URLSearchParams(location.search);
+    let t = params.get("token");
+    if (!t) { try { t = sessionStorage.getItem("aab_token"); } catch (_) {} }
+
+    if (t) {
+      // strip token from visible URL for tidiness
+      if (params.get("token")) {
+        params.delete("token");
+        const clean = location.pathname + (params.toString() ? "?" + params.toString() : "");
+        history.replaceState(null, "", clean);
+      }
+      authenticateAndStart(t);
+    } else {
+      showGate("");
+    }
+  })();
+})();
+</script>
+</body>
+</html>
