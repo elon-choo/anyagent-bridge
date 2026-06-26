@@ -126,9 +126,38 @@ exercised here (no docker daemon on the build machine) — the argv/env builders
 graceful degradation are unit-tested; real `docker run` is left for an environment with
 a daemon.
 
-## Stage 5 — Packaging & distribution
+## Stage 5 — Packaging & distribution ✅
 
-- One-command run via **npx** and **docker-compose**.
-- Cross-platform installation docs.
-- Security disclaimers.
-- Screenshots and walkthroughs.
+One-command installs plus the docs to run the bridge safely on any of the three
+platforms. Zero new runtime dependencies and **no changes to the Stage 1–4 server** —
+the launcher only sets environment variables the server already reads.
+
+- **npx** — `bin/anyagent-bridge.js` (declared in `package.json`'s `bin`) boots the
+  server in-process and maps friendly flags (`--port` / `--host` / `--token` /
+  `--tunnel [provider]` / `--no-tunnel`) onto the existing `PORT` / `HOST` /
+  `BRIDGE_*` env vars. Because dotenv does not override an already-set variable, the
+  precedence is CLI flag > `.env` > `config.json`, and `npx anyagent-bridge` stays
+  equivalent to `node server/index.js`. Unknown flags and bad values fail with exit 1.
+- **Docker** — a multi-stage `Dockerfile` builds `node-pty` in a toolchain stage and
+  ships a slim non-root runtime (`tini` as PID 1, a Node-only `/health` healthcheck,
+  `HOST=0.0.0.0` so the published port reaches it). `docker-compose.yml` publishes on
+  `127.0.0.1` only and persists the token / sessions / audit log in the `bridge-data`
+  named volume (read the token from `docker compose logs`). `.dockerignore` keeps host
+  state and secrets out of the build context. The image carries the bridge + a `bash`
+  shell but **not** the agent CLIs — documented, with two ways to add an agent.
+- **Publishing hygiene** — a `files` allowlist in `package.json` publishes only the app
+  (`bin`/`server`/`client`/`docs`/`test` + `config.example.json` + `.env.example`); a
+  `npm pack --dry-run` confirms `config.json`, `.data/`, `.env`, and `sessions.json` are
+  never in the tarball (38 files, no secrets).
+- **Docs** — `docs/INSTALL.md` (npx · from source · Docker, per-OS toolchain notes,
+  updating / uninstalling / troubleshooting), `docs/SECURITY.md` (threat model, safe
+  defaults, what to enable before exposing it, disclaimers), and `docs/WALKTHROUGH.md`
+  (end-to-end tour + screenshot capture guide). README gains a Quick start.
+
+Verified offline: `node bin/anyagent-bridge.js --version/--help`, error paths exit 1, a
+real boot through the launcher with `/health` returning **HTTP 200** and the banner
+reflecting the `--port`/`--token` flags, `npm pack --dry-run` (file set above), and the
+Stage 4 suites still green (`npm test` → 32 + 9 pass). **Not exercised here:** the Docker
+image build and `docker compose up` — there is no Docker daemon on the build machine, so
+the `Dockerfile` / compose are review-only and **needs-live-docker**. Screenshot PNGs are
+deferred to a live capture (`docs/WALKTHROUGH.md` ships the text walkthrough + capture steps).

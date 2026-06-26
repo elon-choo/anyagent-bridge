@@ -1,0 +1,36 @@
+# anyagent-bridge — one-command self-host.
+#
+#   docker compose up -d --build
+#   docker compose logs bridge          # the startup banner prints your access token
+#   open http://127.0.0.1:3001
+#
+# The bridge grants full terminal + file access to anyone holding the token. The
+# defaults below keep it reachable on localhost only. Read docs/SECURITY.md before
+# exposing it to a network or the internet.
+services:
+  bridge:
+    build: .
+    image: anyagent-bridge:local
+    container_name: anyagent-bridge
+    restart: unless-stopped
+    # Published on localhost only. Do NOT change to 0.0.0.0 here unless you front
+    # the bridge with a tunnel/proxy that has its own authentication.
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      # Inside the container the server binds all interfaces so the published port
+      # can reach it; host exposure is controlled solely by the `ports` mapping.
+      HOST: "0.0.0.0"
+      PORT: "3001"
+      # Pin a token instead of reading it from the logs (optional but recommended
+      # for an unattended deploy):
+      # BRIDGE_AUTH_TOKEN: "replace-with-a-long-random-string"
+    volumes:
+      # Persists the access token and audit log across restarts (both live under .data).
+      - bridge-data:/app/.data
+      # To use your own config.json, create it first (cp config.example.json
+      # config.json) and THEN uncomment — otherwise Docker creates a directory:
+      # - ./config.json:/app/config.json
+
+volumes:
+  bridge-data:

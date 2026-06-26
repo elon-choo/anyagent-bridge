@@ -2,6 +2,22 @@
 
 Control your local computer's terminal — and **any** CLI AI coding agent you've registered (Claude Code, Codex, aider, …) — from a browser on your phone or another PC, anywhere.
 
+## Quick start
+
+```bash
+# Fastest — run it with one command (Node 18+):
+npx anyagent-bridge
+
+# Or self-host with Docker:
+docker compose up -d --build && docker compose logs bridge
+```
+
+Open the printed URL, paste the access token from the banner, and you're in. Full
+install paths (npx · from source · Docker) and per-OS notes are in
+**[docs/INSTALL.md](docs/INSTALL.md)**; read **[docs/SECURITY.md](docs/SECURITY.md)**
+before exposing the bridge beyond localhost, and
+**[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md)** for a guided tour.
+
 ## Goals
 
 - **Open** — fully open source, no lock-in, bring whatever agent you like.
@@ -36,6 +52,8 @@ npm install
 - **macOS** — Xcode Command Line Tools: `xcode-select --install`
 - **Linux** — `build-essential` (or your distro's gcc/g++/make) and Python 3
 - **Windows** — the Visual Studio Build Tools (C++ workload)
+
+For one-command **`npx`** and **Docker / docker-compose** installs, plus updating, uninstalling, and per-OS troubleshooting, see **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 ## Configure
 
@@ -78,14 +96,25 @@ npm start
 
 ## Connect
 
-On first boot the server prints your **access token** and the local URL, for example:
+On first boot the server prints your **access token** and the local URL in a
+banner like this:
 
 ```
-anyagent-bridge listening on http://127.0.0.1:3001
-Access token: 9f3c...  (saved to .data/auth.json)
+===============================================================
+  AnyAgent Bridge — server running
+===============================================================
+  URL:       http://127.0.0.1:3001?token=9f3c...
+  Host:      127.0.0.1
+  Shell:     /bin/zsh
+  Agents:    claude, codex
+  ...
+  Access token (generated): 9f3c...
+===============================================================
 ```
 
-Open that URL in a browser and provide the token when prompted.
+The `URL` already includes the token, so opening it logs you in; otherwise visit
+the address and paste the token when prompted. The token is saved to
+`.data/auth.json` and reused on the next boot.
 
 ## Remote access (Stage 2)
 
@@ -241,7 +270,7 @@ Status at `GET /api/safety/status` (and folded into `GET /api/system/status`).
 - **Localhost by default.** Out of the box the server binds `127.0.0.1`, so only your own machine can reach it.
 - **The token is the gate.** There is no default password and no default token — one is generated on first boot and persisted to `.data/auth.json`. Keep it secret. If you set `host` to `0.0.0.0`, the token is the *only* thing standing between the internet (or your LAN) and your terminal — the server warns you about this at boot.
 - **No credential injection.** The bridge runs your registered command and nothing more; your AI CLI's own login is used as-is.
-- **Add a login before exposing it.** Free tunnels (Stage 2), OAuth + 2FA login (Stage 3), and the Docker sandbox / kill-switch / audit / redaction (Stage 4, see [Sandboxing & safety](#sandboxing--safety-stage-4)) are all shipped. If you expose the bridge, require a login, set `callbackBaseUrl`, and set `trustProxy` for your proxy; prefer localhost or a trusted network otherwise. See [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Add a login before exposing it.** Free tunnels (Stage 2), OAuth + 2FA login (Stage 3), and the Docker sandbox / kill-switch / audit / redaction (Stage 4, see [Sandboxing & safety](#sandboxing--safety-stage-4)) are all shipped. If you expose the bridge, require a login, set `callbackBaseUrl`, and set `trustProxy` for your proxy; prefer localhost or a trusted network otherwise. The full security model and disclaimers are in **[docs/SECURITY.md](docs/SECURITY.md)**.
 
 ## Roadmap
 
@@ -249,7 +278,7 @@ Status at `GET /api/safety/status` (and folded into `GET /api/system/status`).
 - **Stage 2 (this release)** — free tunnel adapters (Dev Tunnels, Cloudflare, Tailscale, cloudflared) for zero-config remote access. See [Remote access](#remote-access-stage-2).
 - **Stage 3 (this release)** — OAuth (Google/GitHub) + 2FA + real session management. See [Login & accounts](#login--accounts-stage-3).
 - **Stage 4 (this release)** — Docker sandboxing, kill-switch, audit logging, secret redaction. See [Sandboxing & safety](#sandboxing--safety-stage-4).
-- **Stage 5** — packaging (npx / docker-compose), cross-platform docs, and screenshots.
+- **Stage 5 (this release)** — packaging: a `bin` launcher for **npx**, a **Dockerfile** + **docker-compose**, cross-platform install docs ([INSTALL](docs/INSTALL.md)), a security guide ([SECURITY](docs/SECURITY.md)), and a [walkthrough](docs/WALKTHROUGH.md).
 
 Full detail in [docs/ROADMAP.md](docs/ROADMAP.md).
 

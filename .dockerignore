@@ -1,0 +1,17 @@
+# Keep the build context (and final image) lean and free of host secrets/state.
+node_modules
+.data
+sessions.json
+uploads
+config.json
+.env
+*.log
+.git
+.gitignore
+.DS_Store
+docs
+test
+README.md
+docker-compose.yml
+Dockerfile
+.dockerignore
