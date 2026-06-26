@@ -3,6 +3,15 @@
   "version": "0.5.0",
   "description": "Control your local terminal and any CLI AI coding agent from a browser, anywhere.",
   "license": "MIT",
+  "author": "elon-choo",
+  "homepage": "https://github.com/elon-choo/anyagent-bridge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elon-choo/anyagent-bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/elon-choo/anyagent-bridge/issues"
+  },
   "main": "server/index.js",
   "bin": {
     "anyagent-bridge": "bin/anyagent-bridge.js"

@@ -52,7 +52,7 @@ state lives.
 ## Path B — From source (recommended for regular use)
 
 ```bash
-git clone https://github.com/<your-org>/anyagent-bridge.git
+git clone https://github.com/elon-choo/anyagent-bridge.git
 cd anyagent-bridge
 npm ci                       # installs deps and builds node-pty
 cp config.example.json config.json
@@ -76,7 +76,7 @@ agent, or Windows Task Scheduler).
 ## Path C — Docker / docker-compose (isolated, reproducible)
 
 ```bash
-git clone https://github.com/<your-org>/anyagent-bridge.git
+git clone https://github.com/elon-choo/anyagent-bridge.git
 cd anyagent-bridge
 docker compose up -d --build
 docker compose logs bridge          # the startup banner prints your access token
