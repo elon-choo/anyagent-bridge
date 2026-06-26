@@ -2,6 +2,8 @@
 
 Control your local computer's terminal — and **any** CLI AI coding agent you've registered (Claude Code, Codex, aider, …) — from a browser on your phone or another PC, anywhere.
 
+![anyagent-bridge — a live terminal in the browser](docs/screenshots/02-terminal-view.png)
+
 ## Quick start
 
 ```bash

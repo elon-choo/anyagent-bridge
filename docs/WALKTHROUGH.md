@@ -1,8 +1,8 @@
 # Walkthrough
 
-A guided tour of using anyagent-bridge end to end. Screenshots referenced below
-live in [`docs/screenshots/`](screenshots/); placeholders are noted where a real
-capture should be dropped in (see [capture instructions](#capturing-screenshots)).
+A guided tour of using anyagent-bridge end to end. The screenshots below live in
+[`docs/screenshots/`](screenshots/); to regenerate them yourself, see the
+[capture instructions](#capturing-screenshots).
 
 ## 1. Start the bridge
 
@@ -26,7 +26,7 @@ The startup banner prints the access URL and token:
 ===============================================================
 ```
 
-> _Screenshot placeholder: `screenshots/01-startup-banner.png` — the terminal banner._
+![Startup banner with the access URL and token](screenshots/01-startup-banner.png)
 
 ## 2. Open the browser UI
 
@@ -35,7 +35,7 @@ Open the printed URL (the `?token=…` logs you in automatically), or visit
 xterm.js terminal wired to a live shell on your machine, plus a toolbar with the
 agent launcher, a file browser, and (if configured) project and tunnel controls.
 
-> _Screenshot placeholder: `screenshots/02-terminal-view.png` — the main terminal UI._
+![The main terminal view — a live shell in the browser](screenshots/02-terminal-view.png)
 
 ## 3. Launch an AI agent
 
@@ -45,7 +45,7 @@ as you would in your own terminal — streamed live to the browser. Type prompts
 send keys, and watch output in real time. Detaching the browser keeps the session
 alive; reconnecting reattaches with full scrollback.
 
-> _Screenshot placeholder: `screenshots/03-agent-running.png` — an agent session in progress._
+![Claude Code running inside a bridge session](screenshots/03-agent-running.png)
 
 ## 4. Browse and edit files
 
@@ -61,14 +61,14 @@ at startup (`--tunnel devtunnel`) or at runtime via the tunnel controls
 ready. Before exposing anything, read [SECURITY.md](SECURITY.md) and turn on
 login / 2FA / OAuth.
 
-> _Screenshot placeholder: `screenshots/04-mobile.png` — the UI on a phone over a tunnel._
+![The bridge UI at a phone-sized viewport](screenshots/04-mobile.png)
 
 ---
 
 ## Capturing screenshots
 
-The placeholders above are intentionally not committed as binaries yet. To
-generate real screenshots locally:
+The images above were captured locally against a running bridge. To regenerate
+them yourself:
 
 1. Start the bridge and note the token: `npm start`.
 2. Open the printed URL in a browser (desktop and a phone/responsive view for the
