@@ -121,10 +121,12 @@ require changing the shipped Stage-3 auth route, so it is deferred.)
 Config: the `safety` block in `config.json` (`BRIDGE_SAFETY_ENABLED`, `BRIDGE_SANDBOX_*`,
 `BRIDGE_AUDIT_ENABLED`, `BRIDGE_REDACT_LIVE`, `BRIDGE_TRUST_PROXY` env overrides).
 Verified: `test/stage4-smoke.js` (32 unit) + `test/stage4-boot.js` (9 integrated,
-byte-identical-off + safety-on + audit recording). Live container spawn is **not**
-exercised here (no docker daemon on the build machine) — the argv/env builders and
-graceful degradation are unit-tested; real `docker run` is left for an environment with
-a daemon.
+byte-identical-off + safety-on + audit recording), **plus a live run against a real
+Docker daemon (colima, 2026-06-26):** the real `spawnSpecFor` argv launches a sandbox
+container (the project bind-mounted at `/workspace`, `--network none`, memory/cpu/pid
+limits, `--security-opt no-new-privileges`, secrets passed by name), the session shell
+runs *inside* it (`uname` → Linux), and `panic` kills + sweeps every
+`aab-<installId>-sess-*` container with no leak while the lock gates new agent launches.
 
 ## Stage 5 — Packaging & distribution ✅
 
@@ -157,7 +159,10 @@ the launcher only sets environment variables the server already reads.
 Verified offline: `node bin/anyagent-bridge.js --version/--help`, error paths exit 1, a
 real boot through the launcher with `/health` returning **HTTP 200** and the banner
 reflecting the `--port`/`--token` flags, `npm pack --dry-run` (file set above), and the
-Stage 4 suites still green (`npm test` → 32 + 9 pass). **Not exercised here:** the Docker
-image build and `docker compose up` — there is no Docker daemon on the build machine, so
-the `Dockerfile` / compose are review-only and **needs-live-docker**. Screenshot PNGs are
-deferred to a live capture (`docs/WALKTHROUGH.md` ships the text walkthrough + capture steps).
+Stage 4 suites still green (`npm test` → 32 + 9 pass). **Verified live (Docker via colima,
+2026-06-26):** `docker compose up --build` builds the multi-stage image, the container
+runs **healthy**, `/health` returns 200 on the localhost-published port, it runs
+**non-root** (`uid 1000`), `node-pty` loads and spawns a real PTY inside the container,
+and the named volume persists the access token across `down && up` (the banner's token
+source flips `generated`→`file`). Screenshot PNGs remain deferred to a live capture
+(`docs/WALKTHROUGH.md` ships the text walkthrough + capture steps).
