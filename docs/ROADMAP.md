@@ -73,12 +73,58 @@ Known residuals (deferred to Stage 4 hardening): `getClientIP` trusts
 rate limit is evadable (the global cap still applies); set `callbackBaseUrl` when
 OAuth is exposed so the redirect URI is not derived from request headers.
 
-## Stage 4 — Sandboxing & safety
+## Stage 4 — Sandboxing & safety ✅
 
-- **Docker isolation** for agent execution.
-- **Kill-switch** to terminate runaway sessions instantly.
-- **Audit logging** of commands and file operations.
-- **Secret redaction** in output streams.
+Four opt-in safety layers in one subsystem, `server/safety/` (entry `index.js` exports
+`createSafetyManager`; `manager.js` orchestrates; `sandbox.js` / `audit.js` / `redact.js`
+/ `clientip.js` are pure leaves). All default **off** — with `safety.enabled` false the
+server is byte-identical to Stage 3 (proven by `test/stage4-boot.js`). Zero new npm
+dependencies: the Docker layer spawns the `docker` CLI (reusing `tunnel/detect`),
+everything else is Node core. `server/index.js` is touched only at marked seams;
+`auth._isOperator` is reused for the operator gate (auth internals untouched).
+
+- **Docker isolation** — the whole session PTY runs `docker run` (the agent launches
+  inside the container, so `startAgent`/`sendToAgent` are unchanged). Only sessions
+  with a bounded **project dir** are sandboxed (never bind-mounts `$HOME`); the project
+  mounts at `/workspace`. Operator-supplied `image` (must contain the agent CLI).
+  `-it` for an in-container TTY; default limits (`--memory`/`--cpus`/`--pids-limit`/
+  `--security-opt no-new-privileges`); opt-in hardening (`--read-only`/`--cap-drop ALL`/
+  `--user`, the last Linux-only). Secrets reach the container as `-e NAME` (values off
+  the process table); the docker client env is a minimal allowlist (never the full
+  `process.env`); `BRIDGE_*`/token are denied even if listed. `network` defaults to
+  `bridge`. `onDockerMissing` = `host` (fall back, default) | `refuse`. Repeated fast
+  container exits auto-degrade to a host shell (no respawn storm). **Graceful, never
+  crashes.**
+- **Kill-switch** — `POST /api/safety/kill/:id` (SIGKILL pty + `docker rm -f`),
+  `POST /api/safety/panic` (kill all + sweep `aab-<installId>-sess-*` strays + optional
+  tunnel stop + optional **lock**), `POST /api/safety/unlock`. The lock gates only new
+  agent launches (never the shell — no remote soft-brick) and persists across restart.
+  Operator-only on REST and WebSocket (`{type:"panic"|"kill"}`). Graceful `destroy()`
+  also reaps its container (no leak); a per-install container-name nonce so panic never
+  kills another install's containers.
+- **Audit logging** — append-only JSONL under `.data/audit/` via one `res.on('finish')`
+  middleware (REST mutations) + WS seams (`agent.start`/`agent.send`); raw keystrokes
+  are intentionally not logged. Date + size rotation, retention prune by strict regex,
+  synchronous ordered append, `flushSync` on exit. Every field is redacted before write.
+- **Secret redaction** — the audit log is **always** scrubbed (AWS/OpenAI/GitHub/Slack/
+  Google keys, JWT, PEM blocks, plus the bridge's own token + session secret by exact
+  match). Live PTY-stream redaction is opt-in (`redaction.liveStream`, default off so the
+  stream stays byte-identical) with a boundary hold-back for split tokens/PEM/ANSI and a
+  bounded `maxHoldBytes` (overflow masks the partial rather than leaking it).
+
+**Stage 3 residual closed:** `trustProxy` (default off, opt-in) makes the client IP for
+rate limiting + audit come from the direct socket peer instead of a spoofable
+`X-Forwarded-For`; `true`/`N` trust the nearest / Nth proxy hop. (The OAuth
+`redirect_uri`-from-Host residual remains a documented boot warning — hardening it would
+require changing the shipped Stage-3 auth route, so it is deferred.)
+
+Config: the `safety` block in `config.json` (`BRIDGE_SAFETY_ENABLED`, `BRIDGE_SANDBOX_*`,
+`BRIDGE_AUDIT_ENABLED`, `BRIDGE_REDACT_LIVE`, `BRIDGE_TRUST_PROXY` env overrides).
+Verified: `test/stage4-smoke.js` (32 unit) + `test/stage4-boot.js` (9 integrated,
+byte-identical-off + safety-on + audit recording). Live container spawn is **not**
+exercised here (no docker daemon on the build machine) — the argv/env builders and
+graceful degradation are unit-tested; real `docker run` is left for an environment with
+a daemon.
 
 ## Stage 5 — Packaging & distribution
 

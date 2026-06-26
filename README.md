@@ -176,19 +176,79 @@ Login endpoints (all under `/api/auth`): `POST /login` · `POST /logout` ·
 Configure it all via the `auth` block in `config.json` or `BRIDGE_*` env vars
 (see `.env.example`).
 
+## Sandboxing & safety (Stage 4)
+
+Four opt-in safety layers, all **off by default**. With `safety.enabled` false the
+server is byte-identical to Stage 3. No new npm dependencies — the Docker layer
+spawns the `docker` CLI; everything else is Node core. Configure via the `safety`
+block in `config.json` or `BRIDGE_*` env vars (see `.env.example`).
+
+```json
+{
+  "safety": {
+    "enabled": true,
+    "trustProxy": false,
+    "sandbox": { "enabled": true, "image": "your-image-with-claude:latest", "network": "bridge", "onDockerMissing": "host" },
+    "killSwitch": { "enabled": true },
+    "audit": { "enabled": true },
+    "redaction": { "liveStream": false }
+  }
+}
+```
+
+- **Docker sandbox** — runs each session's shell (and therefore its agent) inside a
+  container instead of on the host. Only sessions with a real **project folder** are
+  sandboxed (it never bind-mounts your whole home directory); the project is mounted
+  at `/workspace`. You supply an **`image` that already contains your agent CLI** (we
+  can't ship one). `network` defaults to `bridge` so the agent can reach its API;
+  set `none` for offline file-only work. Resource limits (`memory`/`cpus`/`pidsLimit`)
+  and `no-new-privileges` are applied by default; `readOnlyRootfs` / `dropAllCaps` /
+  `runAsHostUser` are opt-in hardening. Secrets reach the container via an
+  **`envPassthrough` allowlist** as `-e NAME` (values never appear in the process
+  table; `BRIDGE_*`/token are always denied). If `docker` is missing, `onDockerMissing`
+  decides: `host` (fall back to a host shell, the default) or `refuse` (don't start).
+- **Kill-switch** — `POST /api/safety/kill/:sessionId` hard-kills one session
+  (SIGKILL + container removal); `POST /api/safety/panic` kills **all** sessions,
+  sweeps stray containers, optionally stops the tunnel, and **locks** the bridge so
+  no new agents launch until `POST /api/safety/unlock`. The lock never strands your
+  shell (only agent launches are refused) and survives a restart. All operator-only;
+  also reachable over WebSocket (`{type:"panic"}` / `{type:"kill"}`).
+- **Audit log** — append-only JSONL under `.data/audit/` of REST mutations and the
+  semantic agent commands (`agent.start` / `agent.send`); raw keystrokes are not
+  logged (they can't be reconstructed into commands). Date + size rotation with
+  retention pruning. Every field is redacted before write.
+- **Secret redaction** — the audit log is **always** scrubbed (AWS / OpenAI / GitHub /
+  Slack / Google keys, JWTs, PEM private keys, plus the bridge's own token). Live
+  PTY-stream redaction is **opt-in** (`redaction.liveStream`) and best-effort — it
+  holds back partial tokens across chunk boundaries but is kept off by default so the
+  terminal stream stays byte-identical.
+
+**Proxy trust (`trustProxy`).** Closes a Stage-3 residual: by default the client IP
+for rate limiting and the audit log now comes from the direct socket peer, ignoring a
+spoofable `X-Forwarded-For`. Behind a tunnel or reverse proxy, set `trustProxy` to
+`true` (trust the nearest hop) or a number `N` (trust `N` hops) so per-client IPs are
+correct. It only takes effect once you opt into the safety subsystem, so an upgraded
+install with no `safety` config is unchanged.
+
+Status at `GET /api/safety/status` (and folded into `GET /api/system/status`).
+
+> **Note:** the Docker sandbox is implemented and unit-tested for argv/secret
+> correctness and graceful degradation, but live container spawning was not exercised
+> on the build machine (no daemon). Test your `image` end-to-end before relying on it.
+
 ## Security notes
 
 - **Localhost by default.** Out of the box the server binds `127.0.0.1`, so only your own machine can reach it.
 - **The token is the gate.** There is no default password and no default token — one is generated on first boot and persisted to `.data/auth.json`. Keep it secret. If you set `host` to `0.0.0.0`, the token is the *only* thing standing between the internet (or your LAN) and your terminal — the server warns you about this at boot.
 - **No credential injection.** The bridge runs your registered command and nothing more; your AI CLI's own login is used as-is.
-- **Add a login before exposing it.** Free tunnels (Stage 2) and OAuth + 2FA login (Stage 3, see [Login & accounts](#login--accounts-stage-3)) are shipped; Docker sandboxing (Stage 4) is next. If you expose the bridge, require a login and set `callbackBaseUrl`; prefer localhost or a trusted network otherwise. See [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Add a login before exposing it.** Free tunnels (Stage 2), OAuth + 2FA login (Stage 3), and the Docker sandbox / kill-switch / audit / redaction (Stage 4, see [Sandboxing & safety](#sandboxing--safety-stage-4)) are all shipped. If you expose the bridge, require a login, set `callbackBaseUrl`, and set `trustProxy` for your proxy; prefer localhost or a trusted network otherwise. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Roadmap
 
 - **Stage 1 (this release)** — portable, cross-platform core: terminal + any-agent control over WebSocket, file API, persistent sessions, token auth.
 - **Stage 2 (this release)** — free tunnel adapters (Dev Tunnels, Cloudflare, Tailscale, cloudflared) for zero-config remote access. See [Remote access](#remote-access-stage-2).
 - **Stage 3 (this release)** — OAuth (Google/GitHub) + 2FA + real session management. See [Login & accounts](#login--accounts-stage-3).
-- **Stage 4** — Docker sandboxing, kill-switch, audit logging, secret redaction.
+- **Stage 4 (this release)** — Docker sandboxing, kill-switch, audit logging, secret redaction. See [Sandboxing & safety](#sandboxing--safety-stage-4).
 - **Stage 5** — packaging (npx / docker-compose), cross-platform docs, and screenshots.
 
 Full detail in [docs/ROADMAP.md](docs/ROADMAP.md).

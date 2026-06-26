@@ -34,5 +34,36 @@
     "cloudflare-quick": { "extraArgs": [] },
     "tailscale": { "extraArgs": [] },
     "cloudflared-named": { "tunnelName": null, "hostname": null, "extraArgs": [] }
+  },
+
+  "safety": {
+    "enabled": false,
+    "trustProxy": false,
+
+    "sandbox": {
+      "enabled": false,
+      "image": null,
+      "network": "bridge",
+      "mountMode": "rw",
+      "workdir": "/workspace",
+      "shell": null,
+      "memory": "2g",
+      "cpus": "2",
+      "pidsLimit": 512,
+      "noNewPrivileges": true,
+      "readOnlyRootfs": false,
+      "dropAllCaps": false,
+      "runAsHostUser": false,
+      "envPassthrough": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"],
+      "onDockerMissing": "host",
+      "onMissingProject": "host",
+      "extraArgs": []
+    },
+
+    "killSwitch": { "enabled": true, "lockOnPanic": true, "stopTunnelOnPanic": true, "persistLock": true },
+
+    "audit": { "enabled": false, "dir": null, "includeReads": false, "maxFileBytes": 10485760, "retentionDays": 30 },
+
+    "redaction": { "liveStream": false, "auditAlways": true, "maxHoldBytes": 8192 }
   }
 }

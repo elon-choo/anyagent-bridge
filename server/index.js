@@ -24,6 +24,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const { createTunnelManager } = require('./tunnel');
 const { createAuthManager } = require('./auth');
+const { createSafetyManager, resolveClientIP } = require('./safety');
 
 const ROOT = path.join(__dirname, '..');
 const HOME = os.homedir();
@@ -61,7 +62,23 @@ const DEFAULT_CONFIG = {
   projects: [],
   allowedPaths: [],
   sessionTimeoutDays: 7,
-  tunnel: { enabled: false, provider: 'devtunnel' }
+  tunnel: { enabled: false, provider: 'devtunnel' },
+  // Stage 4 (safety): all opt-in, all default-off. When safety.enabled is false the
+  // server is byte-identical to Stage 3.
+  safety: {
+    enabled: false,
+    trustProxy: false,
+    sandbox: {
+      enabled: false, image: null, network: 'bridge', mountMode: 'rw', workdir: '/workspace',
+      shell: null, memory: '2g', cpus: '2', pidsLimit: 512, noNewPrivileges: true,
+      readOnlyRootfs: false, dropAllCaps: false, runAsHostUser: false,
+      envPassthrough: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+      onDockerMissing: 'host', onMissingProject: 'host', extraArgs: []
+    },
+    killSwitch: { enabled: true, lockOnPanic: true, stopTunnelOnPanic: true, persistLock: true },
+    audit: { enabled: false, dir: null, includeReads: false, maxFileBytes: 10485760, retentionDays: 30 },
+    redaction: { liveStream: false, auditAlways: true, maxHoldBytes: 8192 }
+  }
 };
 
 function loadConfig() {
@@ -87,7 +104,17 @@ function loadConfig() {
               github: { ...DEFAULT_CONFIG.auth.oauth.github, ...(po.github || {}) }
             }
           },
-          tunnel: { ...DEFAULT_CONFIG.tunnel, ...(parsed.tunnel || {}) }
+          tunnel: { ...DEFAULT_CONFIG.tunnel, ...(parsed.tunnel || {}) },
+          safety: (() => {
+            const ps = parsed.safety || {};
+            return {
+              ...DEFAULT_CONFIG.safety, ...ps,
+              sandbox:    { ...DEFAULT_CONFIG.safety.sandbox,    ...(ps.sandbox    || {}) },
+              killSwitch: { ...DEFAULT_CONFIG.safety.killSwitch, ...(ps.killSwitch || {}) },
+              audit:      { ...DEFAULT_CONFIG.safety.audit,      ...(ps.audit      || {}) },
+              redaction:  { ...DEFAULT_CONFIG.safety.redaction,  ...(ps.redaction  || {}) }
+            };
+          })()
         };
       }
     } catch (e) {
@@ -153,8 +180,44 @@ const CONFIG = {
     if (process.env.BRIDGE_GITHUB_CLIENT_ID) a.oauth.github.clientId = process.env.BRIDGE_GITHUB_CLIENT_ID;
     if (process.env.BRIDGE_GITHUB_CLIENT_SECRET) a.oauth.github.clientSecret = process.env.BRIDGE_GITHUB_CLIENT_SECRET;
     return a;
+  })(),
+  // Stage 4 (safety): config.safety + BRIDGE_* env overrides. Defensive IIFE — a
+  // malformed override defaults rather than crashing boot.
+  SAFETY: (() => {
+    try {
+      const s = JSON.parse(JSON.stringify(config.safety || {}));
+      const envBool = (v) => /^(1|true)$/i.test(String(v));
+      if (process.env.BRIDGE_SAFETY_ENABLED !== undefined) s.enabled = envBool(process.env.BRIDGE_SAFETY_ENABLED);
+      s.sandbox = s.sandbox || {};
+      if (process.env.BRIDGE_SANDBOX_ENABLED !== undefined) s.sandbox.enabled = envBool(process.env.BRIDGE_SANDBOX_ENABLED);
+      if (process.env.BRIDGE_SANDBOX_IMAGE) s.sandbox.image = process.env.BRIDGE_SANDBOX_IMAGE;
+      if (process.env.BRIDGE_SANDBOX_NETWORK) s.sandbox.network = process.env.BRIDGE_SANDBOX_NETWORK;
+      if (process.env.BRIDGE_SANDBOX_ON_DOCKER_MISSING) s.sandbox.onDockerMissing = process.env.BRIDGE_SANDBOX_ON_DOCKER_MISSING;
+      s.audit = s.audit || {};
+      if (process.env.BRIDGE_AUDIT_ENABLED !== undefined) s.audit.enabled = envBool(process.env.BRIDGE_AUDIT_ENABLED);
+      if (process.env.BRIDGE_AUDIT_DIR) s.audit.dir = process.env.BRIDGE_AUDIT_DIR;
+      s.redaction = s.redaction || {};
+      if (process.env.BRIDGE_REDACT_LIVE !== undefined) s.redaction.liveStream = envBool(process.env.BRIDGE_REDACT_LIVE);
+      if (process.env.BRIDGE_TRUST_PROXY !== undefined) {
+        const v = String(process.env.BRIDGE_TRUST_PROXY).trim();
+        s.trustProxy = /^(false|0|off|no)$/i.test(v) ? false
+          : /^(true|1|on|yes)$/i.test(v) ? true
+          : (parseInt(v, 10) > 0 ? parseInt(v, 10) : false);
+      }
+      return s;
+    } catch (e) {
+      console.error(`[Config] safety override parse failed (${e.message}) — using defaults`);
+      return JSON.parse(JSON.stringify(DEFAULT_CONFIG.safety));
+    }
   })()
 };
+
+// trustProxy is consumed by getClientIP (a server-level concern). It takes effect
+// ONLY when the operator has opted into the safety subsystem (safety.enabled) or set
+// BRIDGE_TRUST_PROXY — so with no safety config, getClientIP keeps the exact Stage-3
+// behavior (byte-identical rule).
+CONFIG.TRUST_PROXY = (CONFIG.SAFETY && CONFIG.SAFETY.trustProxy !== undefined) ? CONFIG.SAFETY.trustProxy : false;
+CONFIG.TRUST_PROXY_SET = !!(CONFIG.SAFETY && CONFIG.SAFETY.enabled) || process.env.BRIDGE_TRUST_PROXY !== undefined;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Auth token
@@ -244,6 +307,13 @@ const rateLimiter = {
 };
 
 function getClientIP(req) {
+  // Stage 4: when the operator opts in (trustProxy configured), resolve the IP under
+  // an explicit proxy-trust policy — this closes the Stage-3 residual where a remote
+  // client could spoof X-Forwarded-For to dodge the per-IP login rate limit and forge
+  // the audit IP. With no opt-in, the original Stage-3 expression is kept verbatim.
+  if (CONFIG.TRUST_PROXY_SET) {
+    return resolveClientIP(req, CONFIG.TRUST_PROXY);
+  }
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
          req.socket?.remoteAddress ||
          'unknown';
@@ -308,6 +378,20 @@ const auth = createAuthManager(CONFIG.AUTH, {
   rateLimit: { check: checkLoginRateLimit, record: recordLoginAttempt }
 });
 
+// Stage 4: safety manager (Docker sandbox + kill-switch + audit log + secret
+// redaction). Inert when safety.enabled is false (the default) → byte-identical to
+// Stage 3. Reuses auth._isOperator for the operator gate; never reaches into auth
+// internals beyond that.
+const safety = createSafetyManager(CONFIG.SAFETY, {
+  logger: console,
+  dataDir: DATA_DIR,
+  baseShell: CONFIG.SHELL,
+  blockedDirs: [HOME, ...ALLOWED_BASE_PATHS],
+  secrets: { authToken: AUTH_TOKEN, sessionSecret: CONFIG.AUTH && CONFIG.AUTH.sessionSecret },
+  isOperator: (p) => auth._isOperator(p),
+  getClientIP
+});
+
 /**
  * Auth middleware. Accepts the static token (when direct access is allowed) OR a
  * valid signed session presented via cookie / Bearer / X-Session-Token / ?token /
@@ -369,6 +453,11 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Stage 4: audit middleware. Mounted before the route definitions so it observes
+// every /api route's completion; no-op (nothing added to the stack) when audit is
+// off → byte-identical request pipeline.
+safety.installAuditMiddleware(app);
 
 // Mount /api/auth/* routes (login, OAuth, TOTP, sessions).
 auth.registerRoutes(app, { requireAuth });
@@ -433,8 +522,22 @@ class TerminalSession {
     this.createdAt = options.createdAt || Date.now();
     this.output = [];
     this.activeAgentId = null;
+    this.containerName = null;   // Stage 4: set when this session's PTY runs in a Docker sandbox
+    this._redactor = null;       // Stage 4: per-PTY live-stream redactor (null unless redaction.liveStream)
 
     this.init();
+  }
+
+  /**
+   * Stage 4 seam: resolve how to spawn this session's PTY. When the sandbox is off
+   * (the default) this returns the original host-shell spawn, byte-identical to
+   * earlier stages. When on it returns a `docker run` spec, or a 'refuse' marker.
+   */
+  _ptySpawnSpec(cwd) {
+    const baseEnv = this._spawnEnv();
+    const spec = safety.spawnSpecFor(this, cwd, baseEnv); // null when sandbox is off / not applicable
+    if (spec) return spec;
+    return { kind: 'host', file: CONFIG.SHELL, args: [], env: baseEnv, cwd };
   }
 
   getDefaultName() {
@@ -471,7 +574,18 @@ class TerminalSession {
   }
 
   _wirePty() {
+    // Stage 4: a fresh live-stream redactor for this PTY, or null when
+    // redaction.liveStream is off (the default) → the onData path below is then
+    // byte-identical to earlier stages (no allocation, same `data` reference).
+    this._redactor = safety.newLiveStream();
+
     this.ptyProcess.onData((data) => {
+      if (this._redactor) {
+        const clean = this._redactor.push(data);
+        this.lastActivity = Date.now();
+        if (!clean) return; // fully held back this tick; emitted on a later chunk/flush
+        data = clean;
+      }
       this.output.push(data);
       if (this.output.length > CONFIG.SCROLLBACK_LIMIT) {
         this.output.shift();
@@ -482,6 +596,15 @@ class TerminalSession {
 
     this.ptyProcess.onExit(({ exitCode }) => {
       console.log(`[Session ${this.sessionId}] PTY exited (code: ${exitCode})`);
+      // Flush any redactor carry so trailing output is not swallowed.
+      if (this._redactor) {
+        try {
+          const tail = this._redactor.flush();
+          if (tail) { this.output.push(tail); this._broadcast({ type: 'output', data: tail }); }
+        } catch (e) { /* ignore */ }
+        this._redactor = null;
+      }
+      safety.noteSandboxExit(this); // Stage 4: auto-degrade if a sandbox keeps dying fast
       this.ptyProcess = null; // mark dead
       this.activeAgentId = null;
       if (this.clients.size > 0) {
@@ -493,15 +616,24 @@ class TerminalSession {
 
   init() {
     const cwd = this._resolveCwd();
-    this.ptyProcess = pty.spawn(CONFIG.SHELL, [], {
+    const spec = this._ptySpawnSpec(cwd);
+    if (spec.kind === 'refuse') {
+      this.ptyProcess = null;
+      this.containerName = null;
+      this._broadcast({ type: 'output', data: spec.message });
+      console.warn(`[Session ${this.sessionId}] Spawn refused (sandbox):${spec.message.replace(/\r?\n/g, ' ')}`);
+      return;
+    }
+    this.containerName = spec.containerName || null;
+    this.ptyProcess = pty.spawn(spec.file, spec.args, {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
-      cwd,
-      env: this._spawnEnv()
+      cwd: spec.cwd,
+      env: spec.env
     });
     this._wirePty();
-    console.log(`[Session ${this.sessionId}] Created (cwd: ${cwd})`);
+    console.log(`[Session ${this.sessionId}] Created (cwd: ${cwd}${spec.sandboxed ? `, sandboxed: ${spec.containerName}` : ''})`);
   }
 
   /** Respawn a dead PTY so the session stays alive. Backoff against fork storms. */
@@ -521,13 +653,21 @@ class TerminalSession {
     }
 
     const cwd = this._resolveCwd();
+    const spec = this._ptySpawnSpec(cwd);
+    if (spec.kind === 'refuse') {
+      this.ptyProcess = null;
+      this.containerName = null;
+      this._broadcast({ type: 'output', data: spec.message });
+      return;
+    }
     try {
-      this.ptyProcess = pty.spawn(CONFIG.SHELL, [], {
+      this.containerName = spec.containerName || null;
+      this.ptyProcess = pty.spawn(spec.file, spec.args, {
         name: 'xterm-256color',
         cols: 80,
         rows: 24,
-        cwd,
-        env: this._spawnEnv()
+        cwd: spec.cwd,
+        env: spec.env
       });
       this._wirePty();
       console.log(`[Session ${this.sessionId}] PTY respawned (cwd: ${cwd})`);
@@ -619,6 +759,13 @@ class TerminalSession {
     if (this.ptyProcess) {
       this.ptyProcess.kill();
       this.ptyProcess = null;
+    }
+    // Stage 4: reap the sandbox container too — killing the PTY (the docker client)
+    // does not reliably stop the container, so the graceful delete path must not leak
+    // it. Best-effort; a no-op when this session was never sandboxed.
+    if (this.containerName) {
+      try { safety.reapContainer(this.containerName); } catch (e) { /* best-effort */ }
+      this.containerName = null;
     }
     for (const ws of this.clients) {
       try { ws.close(); } catch (e) { /* already closed */ }
@@ -836,7 +983,7 @@ app.delete('/api/sessions/:sessionId', requireAuth, (req, res) => {
 
 // System status. Stage 1 has no tunnel — reflected as tunnel: null.
 app.get('/api/system/status', requireAuth, (req, res) => {
-  res.json({
+  const body = {
     server: {
       host: CONFIG.HOST,
       port: CONFIG.PORT,
@@ -850,7 +997,12 @@ app.get('/api/system/status', requireAuth, (req, res) => {
       shell: CONFIG.SHELL,
       home: HOME
     }
-  });
+  };
+  // Stage 4: append `safety` ONLY when the subsystem is on (getStatus() non-null),
+  // as the last key, so the off-path JSON is byte-identical to Stage 3.
+  const safetyStatus = safety.getStatus();
+  if (safetyStatus) body.safety = safetyStatus;
+  res.json(body);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -875,6 +1027,12 @@ app.post('/api/tunnel/restart', requireAuth, (req, res) => {
   tunnel.restart();
   res.json(tunnel.getStatus() || { state: 'idle', provider: null, url: null });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Safety control (Stage 4) — kill-switch + status. Registers nothing when
+// safety.enabled is false (no /api/safety/* routes exist) → byte-identical.
+// ═══════════════════════════════════════════════════════════════════════════
+safety.registerRoutes(app, { requireAuth, sessions, tunnel, saveSessions });
 
 // Note: POST /api/auth/verify-local (token login) is now registered by the auth
 // manager (server/auth) alongside the rest of /api/auth/*, with 2FA enforcement
@@ -1382,6 +1540,7 @@ wss.on('connection', (ws, req) => {
   }
 
   console.log(`[WebSocket] Authenticated connection from ${clientIP} (${principal.type})`);
+  ws.principal = principal; // Stage 4: used by the operator-gated kill/panic WS path
 
   let currentSession = null;
   let heartbeatInterval = null;
@@ -1398,6 +1557,11 @@ wss.on('connection', (ws, req) => {
     try {
       ws._lastMessageAt = Date.now();
       const msg = JSON.parse(message);
+
+      // Stage 4: operator panic/kill over WebSocket. Consumed only when safety is on
+      // AND the principal is an operator; returns false otherwise → the switch below
+      // runs unchanged (byte-identical when off).
+      if (safety.handleWsMessage(msg, { principal, sessions, tunnel, ws, saveSessions, clientIP })) return;
 
       switch (msg.type) {
         case 'init': {
@@ -1444,12 +1608,23 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'error', message: `Unknown agentId: ${msg.agentId}` }));
             break;
           }
+          // Stage 4: refuse new agent launches while the bridge is panic-locked
+          // (always allowed when safety/kill-switch is off).
+          if (!safety.canLaunchAgent()) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Bridge is locked (panic) — unlock to launch agents.' }));
+            break;
+          }
           currentSession.startAgent(agent);
+          safety.auditWs('agent.start', { principal, target: agent.id, termSessionId: currentSession.sessionId, clientIP });
           break;
         }
 
         case 'sendToAgent':
-          if (currentSession) currentSession.sendToAgent(msg.text ?? msg.message ?? msg.command);
+          if (currentSession) {
+            const text = msg.text ?? msg.message ?? msg.command;
+            currentSession.sendToAgent(text);
+            safety.auditWs('agent.send', { principal, target: text, termSessionId: currentSession.sessionId, clientIP });
+          }
           break;
 
         case 'detach':
@@ -1508,6 +1683,7 @@ process.on('uncaughtException', (err) => {
   try { saveSessions(); } catch (e) {}
   if (err && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) {
     console.error(`[CRITICAL] Fatal bind error (${err.code}) — exiting`);
+    try { safety.flushSync(); } catch (e) {} // Stage 4: don't lose the audit tail on fatal exit
     setTimeout(() => process.exit(1), 200);
   }
 });
@@ -1521,6 +1697,8 @@ function shutdown(signal) {
   console.log(`\n[Server] Shutting down (${signal})...`);
   saveSessions();
   sessions.forEach(session => session.destroy());
+  safety.flushSync();       // Stage 4: persist the audit tail before exit
+  safety.sweepOnShutdown(); // Stage 4: best-effort reap of any stray sandbox containers
   // Stop the tunnel child too, but never let a hung CLI block exit.
   const hardExit = setTimeout(() => process.exit(0), 3000);
   if (hardExit.unref) hardExit.unref();
@@ -1579,6 +1757,9 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
       console.log('             (e.g. your tunnel URL) for reliable, non-spoofable callbacks.');
     }
   }
+  // Stage 4: safety subsystem summary. Returns zero lines when safety is off, so the
+  // banner is byte-identical to Stage 3 in the default configuration.
+  for (const line of safety.bootSummaryLines()) console.log(line);
   console.log('===============================================================');
 
   // Stage 2: start the configured tunnel AFTER the local server is up. The URL
