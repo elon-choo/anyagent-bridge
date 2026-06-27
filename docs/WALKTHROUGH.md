@@ -7,6 +7,7 @@ A guided tour of using anyagent-bridge end to end. The screenshots below live in
 ## 1. Start the bridge
 
 ```bash
+npx anyagent-bridge setup    # guided first-timer setup (recommended), or:
 npx anyagent-bridge          # or: npm start  /  docker compose up -d --build
 ```
 
@@ -60,6 +61,13 @@ at startup (`--tunnel devtunnel`) or at runtime via the tunnel controls
 (`POST /api/tunnel/start`). The banner and the UI show the public URL once it is
 ready. Before exposing anything, read [SECURITY.md](SECURITY.md) and turn on
 login / 2FA / OAuth.
+
+The easiest way onto a phone: click **"📱 Connect a device"** in the top bar. It
+shows a scannable QR for your current address (or a live tunnel), the localhost
+link, step-by-step same-Wi-Fi instructions, and a one-click "Start internet
+tunnel" — so you never type the long token on a phone.
+
+![The "Connect a device" panel with a scannable QR](screenshots/05-connect-device.png)
 
 ![The bridge UI at a phone-sized viewport](screenshots/04-mobile.png)
 

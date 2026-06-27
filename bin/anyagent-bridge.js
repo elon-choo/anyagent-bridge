@@ -28,6 +28,7 @@ function printHelp() {
     '',
     'Usage:',
     '  anyagent-bridge [options]',
+    '  anyagent-bridge setup            Guided, first-timer setup (recommended to start).',
     '',
     'Options:',
     '  -p, --port <n>           Port to listen on (default 3001).',
@@ -53,6 +54,11 @@ function fail(msg) {
   process.exit(1);
 }
 
+// Subcommand: `anyagent-bridge setup` launches the guided first-timer wizard.
+// Anything else is the normal flag-parse + boot below.
+if (argv[0] === 'setup') {
+  require(path.join(__dirname, 'setup.js'));
+} else {
 for (let i = 0; i < argv.length; i++) {
   let arg = argv[i];
   // Support the `--flag=value` form for long options. Splitting it out here also
@@ -125,3 +131,4 @@ for (let i = 0; i < argv.length; i++) {
 // Boot the server in-process. ROOT inside the server resolves relative to its own
 // __dirname, so config.json and .data live alongside the installed package.
 require(path.join(__dirname, '..', 'server', 'index.js'));
+}

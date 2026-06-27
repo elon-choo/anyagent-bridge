@@ -32,7 +32,9 @@ npx anyagent-bridge
 ```
 
 This downloads and runs the bridge in one step, then prints an access URL with a
-token. Open it in your browser. Useful flags:
+token. Open it in your browser. New to this? Run `npx anyagent-bridge setup` for a
+guided, first-timer flow (prerequisite checks + help opening it on a phone or
+another PC); see [GETTING-STARTED.md](GETTING-STARTED.md). Useful flags:
 
 ```bash
 npx anyagent-bridge --port 8080            # listen on a different port

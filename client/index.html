@@ -105,6 +105,47 @@
     select, button, input { font-size: 12px; padding: 7px 9px; }
     #status { margin-left: auto; }
   }
+
+  /* Connect-a-device onboarding */
+  #onboard {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(13,17,23,.96);
+    display: none; align-items: center; justify-content: center; padding: 18px;
+  }
+  #onboard.open { display: flex; }
+  #onboard .card {
+    position: relative;
+    background: var(--bar); border: 1px solid var(--border); border-radius: 12px;
+    width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto;
+    padding: 20px 22px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  #onboard h2 { margin: 0 0 2px; font-size: 17px; }
+  #onboard h2 .dot { color: var(--accent); }
+  #onboard .sub { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  #onboard .ob-close {
+    position: absolute; top: 12px; right: 14px;
+    background: transparent; border: none; color: var(--muted);
+    font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px;
+  }
+  #onboard .ob-close:hover { color: var(--fg); }
+  #onboard .qrbox {
+    display: flex; align-items: center; justify-content: center;
+    background: #fff; border-radius: 10px; padding: 14px;
+    margin: 0 auto 8px; width: max-content;
+  }
+  #onboard .qrbox img, #onboard .qrbox canvas { display: block; }
+  #onboard .qrcap { color: var(--muted); font-size: 12px; text-align: center; margin: 0 0 6px; }
+  #onboard .blk { border-top: 1px solid var(--border); padding: 12px 0 4px; }
+  #onboard .blk:first-of-type { border-top: none; }
+  #onboard .blk h3 { margin: 0 0 6px; font-size: 13px; }
+  #onboard .blk p { margin: 0 0 8px; font-size: 12.5px; color: var(--fg); line-height: 1.55; }
+  #onboard code {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 5px;
+    padding: 1px 6px; font-size: 12px; word-break: break-all;
+  }
+  #onboard .warn { color: var(--yellow); }
+  #onboard .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  #onboard .muted { color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -113,6 +154,7 @@
     <span class="title">AnyAgent<span class="dot">·</span>Bridge</span>
     <select id="agentSel" title="Agent"></select>
     <button id="startBtn">Start</button>
+    <button id="connectBtn" title="Open on a phone or another device">📱 Connect a device</button>
     <select id="projectSel" title="Project" style="display:none"></select>
     <span class="spacer"></span>
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
@@ -136,6 +178,32 @@
       <div class="divider">or</div>
       <button class="oauthBtn" id="oauthGoogle" data-provider="google" style="display:none">Continue with Google</button>
       <button class="oauthBtn" id="oauthGithub" data-provider="github" style="display:none">Continue with GitHub</button>
+    </div>
+  </div>
+</div>
+
+<div id="onboard">
+  <div class="card">
+    <button class="ob-close" id="obClose" aria-label="Close">×</button>
+    <h2>Connect a device</h2>
+    <p class="sub">Open this bridge on your phone or another computer. Scan the code, or follow the steps below.</p>
+    <div class="qrbox" id="obQrBox"><div id="obQr"></div></div>
+    <p class="qrcap" id="obQrCap"></p>
+    <div class="blk" id="obPhone">
+      <h3>📱 On your phone</h3>
+      <p id="obPhoneMsg">Preparing…</p>
+      <div class="row" id="obTunnelRow"></div>
+    </div>
+    <div class="blk">
+      <h3>💻 This computer</h3>
+      <p>Open <code id="obLocalUrl">…</code> in this machine's browser.</p>
+    </div>
+    <div class="blk">
+      <h3>🖥 Another PC on the same Wi-Fi</h3>
+      <p id="obLanMsg">…</p>
+    </div>
+    <div class="blk">
+      <p class="warn">Beyond this computer, the access token is the only lock until you turn on login — set up login / 2FA / OAuth and read <code>docs/SECURITY.md</code> before exposing it.</p>
     </div>
   </div>
 </div>
@@ -482,6 +550,104 @@
       if (any) oauthRow.style.display = "";
     } catch (_) {}
   }
+
+  // ---------- Connect-a-device onboarding ----------
+  const connectBtn = $("connectBtn"), onboard = $("onboard"), obClose = $("obClose");
+  let qrLibPromise = null, tunnelPolling = false;
+  function loadQrLib() {
+    if (window.QRCode) return Promise.resolve();
+    if (qrLibPromise) return qrLibPromise;
+    qrLibPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js";
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("QR library failed to load"));
+      document.head.appendChild(s);
+    });
+    return qrLibPromise;
+  }
+  // The QR carries the access token so the device logs in by scanning. With a
+  // cookie-only (OAuth) session there is no JS token, so it links to the page
+  // and the device logs in there.
+  function loginQuery() { return token ? ("/?token=" + encodeURIComponent(token)) : "/"; }
+  async function showQr(url) {
+    const box = $("obQrBox"), holder = $("obQr");
+    try {
+      await loadQrLib();
+      holder.innerHTML = "";
+      new window.QRCode(holder, { text: url, width: 196, height: 196, correctLevel: window.QRCode.CorrectLevel.M });
+      box.style.display = "flex";
+    } catch (e) {
+      box.style.display = "none";
+    }
+  }
+  async function openOnboard() {
+    onboard.classList.add("open");
+    const port = location.port || (location.protocol === "https:" ? "443" : "80");
+    $("obLocalUrl").textContent = location.origin + "/";
+    $("obLanMsg").innerHTML =
+      'Restart the bridge so it listens on your network — run <code>anyagent-bridge setup</code> and pick ' +
+      '"same Wi-Fi", or add <code>--host 0.0.0.0</code> — then on the other device open ' +
+      '<code>http://&lt;this-computer-ip&gt;:' + port + '/</code> and paste the token.';
+    const phoneMsg = $("obPhoneMsg"), tunnelRow = $("obTunnelRow"), qrCap = $("obQrCap");
+    tunnelRow.innerHTML = "";
+    let sys = null;
+    try { sys = await api("/api/system/status"); } catch (_) {}
+    const tunnelUrl = sys && sys.tunnel && sys.tunnel.url;
+    const isLocalHost = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+    if (tunnelUrl) {
+      phoneMsg.textContent = "A live internet tunnel is running. Scan to open it from anywhere:";
+      qrCap.textContent = "Point your phone's camera at this code.";
+      showQr(tunnelUrl.replace(/\/+$/, "") + loginQuery());
+    } else if (!isLocalHost) {
+      phoneMsg.textContent = "Your phone must be on the same Wi-Fi as this computer. Scan to open:";
+      qrCap.textContent = "Point your phone's camera at this code.";
+      showQr(location.origin + loginQuery());
+    } else {
+      qrCap.textContent = "";
+      $("obQrBox").style.display = "none";
+      phoneMsg.innerHTML = "This bridge is only listening on this computer, so a phone can't reach it yet. Start a free internet tunnel:";
+      const btn = document.createElement("button");
+      btn.textContent = "Start internet tunnel";
+      btn.className = "primary";
+      btn.addEventListener("click", () => startTunnel(btn));
+      tunnelRow.appendChild(btn);
+      const note = document.createElement("span");
+      note.className = "muted";
+      note.textContent = "Turn on login/2FA first if anyone else could reach it.";
+      tunnelRow.appendChild(note);
+    }
+  }
+  async function startTunnel(btn) {
+    if (tunnelPolling) return;            // ignore a second click while one poll is in flight
+    tunnelPolling = true;
+    btn.disabled = true; btn.textContent = "Starting…";
+    try {
+      await fetch("/api/tunnel/start", { method: "POST", credentials: "include", headers: token ? { Authorization: "Bearer " + token } : {} });
+    } catch (_) {}
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!onboard.classList.contains("open")) { tunnelPolling = false; return; } // panel closed — stop polling
+      let sys; try { sys = await api("/api/system/status"); } catch (_) { continue; }
+      const url = sys && sys.tunnel && sys.tunnel.url;
+      if (url) {
+        tunnelPolling = false;
+        btn.textContent = "Tunnel ready ✓";
+        $("obPhoneMsg").textContent = "Scan to open over the internet:";
+        $("obQrCap").textContent = "Point your phone's camera at this code.";
+        showQr(url.replace(/\/+$/, "") + loginQuery());
+        return;
+      }
+    }
+    tunnelPolling = false;
+    btn.disabled = false; btn.textContent = "Start internet tunnel";
+    $("obPhoneMsg").innerHTML = "The tunnel didn't come up — the tunnel CLI may not be installed. See <code>docs/INSTALL.md</code> (Remote access).";
+  }
+  function closeOnboard() { onboard.classList.remove("open"); }
+  connectBtn.addEventListener("click", openOnboard);
+  obClose.addEventListener("click", closeOnboard);
+  onboard.addEventListener("click", (e) => { if (e.target === onboard) closeOnboard(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && onboard.classList.contains("open")) closeOnboard(); });
 
   // ---------- Bootstrap ----------
   (async function boot() {

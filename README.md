@@ -7,15 +7,20 @@ Control your local computer's terminal — and **any** CLI AI coding agent you'v
 ## Quick start
 
 ```bash
-# Fastest — run it with one command (Node 18+):
+# New here? A guided, first-timer setup (checks prerequisites, helps you go mobile):
+npx anyagent-bridge setup
+
+# Or run it directly (Node 18+):
 npx anyagent-bridge
 
 # Or self-host with Docker:
 docker compose up -d --build && docker compose logs bridge
 ```
 
-Open the printed URL, paste the access token from the banner, and you're in. Full
-install paths (npx · from source · Docker) and per-OS notes are in
+Open the printed URL, paste the access token from the banner, and you're in. To open
+it on a phone or another PC, click **"📱 Connect a device"** in the top bar and scan
+the QR. New to all this? Start with **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**.
+Full install paths (npx · from source · Docker) and per-OS notes are in
 **[docs/INSTALL.md](docs/INSTALL.md)**; read **[docs/SECURITY.md](docs/SECURITY.md)**
 before exposing the bridge beyond localhost, and
 **[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md)** for a guided tour.
