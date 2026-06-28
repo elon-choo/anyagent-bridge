@@ -29,6 +29,7 @@ function printHelp() {
     'Usage:',
     '  anyagent-bridge [options]',
     '  anyagent-bridge setup            Guided, first-timer setup (recommended to start).',
+    '  anyagent-bridge setup --yes      Same, non-interactive (accept defaults; for automation).',
     '',
     'Options:',
     '  -p, --port <n>           Port to listen on (default 3001).',

@@ -58,11 +58,15 @@ function firstLanIPv4() {
   return null;
 }
 
-// ── interactive prompt (degrades gracefully without a TTY) ─────────────────────
+// `--yes` / `-y`: run non-interactively, accept all defaults (this computer, no agent
+// auto-install). For automation / AI-driven setup, or any non-TTY environment.
+const AUTO = process.argv.includes('--yes') || process.argv.includes('-y');
+
+// ── interactive prompt (degrades gracefully without a TTY or with --yes) ──────────
 let rl = null;
 function ask(question, choices) {
   return new Promise((resolve) => {
-    if (!process.stdin.isTTY) { resolve(choices ? choices[0].key : ''); return; }
+    if (AUTO || !process.stdin.isTTY) { resolve(choices ? choices[0].key : ''); return; }
     if (!rl) rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     rl.question(question, (answer) => resolve(answer.trim()));
   });
@@ -72,8 +76,8 @@ async function pick(title, choices) {
   out();
   out(bold(title));
   for (const ch of choices) out(`  ${cyan(ch.key)}) ${ch.label}${ch.hint ? dim('  — ' + ch.hint) : ''}`);
-  if (!process.stdin.isTTY) {
-    out(dim('  (no interactive terminal — defaulting to option ' + choices[0].key + ')'));
+  if (AUTO || !process.stdin.isTTY) {
+    out(dim('  (non-interactive — using option ' + choices[0].key + ')'));
     return choices[0];
   }
   for (;;) {
@@ -85,7 +89,7 @@ async function pick(title, choices) {
 }
 
 async function confirm(question, def = true) {
-  if (!process.stdin.isTTY) return def;
+  if (AUTO || !process.stdin.isTTY) return def;
   const a = (await ask(`${question} ${dim(def ? '[Y/n]' : '[y/N]')} `)).toLowerCase();
   if (!a) return def;
   return a.startsWith('y');
