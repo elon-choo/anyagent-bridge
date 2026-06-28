@@ -132,7 +132,9 @@ t('buildDockerArgs has run --rm -it, name, mount, limits, image, shell', () => {
   const j = args.join(' ');
   assert(args[0] === 'run' && args.includes('--rm') && args.includes('-it'), j);
   assert(j.includes('--name aab-x-sess-1-ab'), j);
-  assert(j.includes('-v /tmp/proj:/workspace') && j.includes('-w /workspace'), j);
+  // OS-aware: buildDockerArgs maps the host path via dockerMountPath (e.g. on Windows
+  // C:\tmp\proj → //c/tmp/proj), so derive the expected mount the same way.
+  assert(j.includes('-v ' + sandbox.dockerMountPath('/tmp/proj') + ':/workspace') && j.includes('-w /workspace'), j);
   assert(j.includes('--network bridge') && j.includes('--memory 2g') && j.includes('--pids-limit 512'), j);
   assert(j.includes('--security-opt no-new-privileges'), j);
   assert(args[args.length - 2] === 'demo:latest' || args.includes('demo:latest'), j);

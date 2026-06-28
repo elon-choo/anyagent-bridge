@@ -103,6 +103,13 @@ so you never paste keys into the chat or hand-edit dotfiles.
   tunnel at all — use the "same Wi-Fi" address instead.
 - **Lost the token** — it's printed in the terminal banner; scroll up, or stop and
   re-run. You can also pin your own with `--token`.
+- **Windows: another device can't reach it on Wi-Fi** — the first inbound connection
+  triggers a Windows Firewall prompt; click **Allow** (at least for Private networks).
+  If you dismissed it, allow `node` in Windows Defender Firewall settings.
+- **Windows: a red `'...cmd_autorun.bat' is not recognized…` line at the top of the
+  terminal** — that's not an anyagent-bridge error. It's a stale `cmd.exe` AutoRun
+  registry key on your machine (`HKCU\Software\Microsoft\Command Processor\AutoRun`);
+  the shell still works. Clear that key if you want the line gone.
 
 ## Where to go next
 

@@ -744,7 +744,10 @@ class TerminalSession {
       console.warn(`[Session ${this.sessionId}] startAgent: invalid agent`);
       return;
     }
-    this.write(`${agent.command}\n`);
+    // Submit with CR, not LF: a real Enter key sends "\r" to a PTY. On Unix the line
+    // discipline maps CR→NL (ICRNL) so the command still runs; on Windows ConPTY,
+    // cmd.exe only executes a line ended with "\r" ("\n" types it but never runs it).
+    this.write(`${agent.command}\r`);
     this.activeAgentId = agent.id;
     console.log(`[Session ${this.sessionId}] Started agent '${agent.id}' (${agent.command})`);
   }
@@ -752,7 +755,7 @@ class TerminalSession {
   /** Send a line of text to whatever is currently running in the PTY. */
   sendToAgent(text) {
     if (text == null) return;
-    this.write(String(text) + '\n');
+    this.write(String(text) + '\r'); // CR submits on both Unix PTYs and Windows ConPTY (see startAgent)
   }
 
   destroy() {

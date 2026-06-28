@@ -18,6 +18,7 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const readline = require('readline');
+const { spawnSync } = require('child_process');
 const pkg = require('../package.json');
 
 // ── tiny ANSI helpers (no dependency) ─────────────────────────────────────────
@@ -114,8 +115,17 @@ async function confirm(question, def = true) {
   if (!agents.some((a) => a.found)) {
     out();
     out(yellow('  No AI agent CLI was found. The bridge still runs (you get a plain shell),'));
-    out(yellow('  but to launch an agent install one first, e.g. Claude Code:'));
-    out('    ' + cyan('npm install -g @anthropic-ai/claude-code') + dim('   then run `claude` once to log in.'));
+    out(yellow('  but to launch an agent you need one installed.'));
+    const wantClaude = await confirm('  Install Claude Code now (npm i -g @anthropic-ai/claude-code)?', false);
+    if (wantClaude) {
+      out(dim('  Installing via npm — this may take a minute…'));
+      const r = spawnSync('npm', ['install', '-g', '@anthropic-ai/claude-code'],
+        { stdio: 'inherit', shell: process.platform === 'win32' });
+      if (r.status === 0) out(green('  ✓ Installed. Run `claude` once in a terminal to log in, then it shows up here.'));
+      else out(yellow('  Install didn\'t finish — do it manually: ') + cyan('npm install -g @anthropic-ai/claude-code'));
+    } else {
+      out('  Install one yourself, e.g.: ' + cyan('npm install -g @anthropic-ai/claude-code') + dim('   then run `claude` once to log in.'));
+    }
     out(dim('  (Any CLI works — register it under "agents" in config.json.)'));
   }
 
@@ -145,6 +155,7 @@ async function confirm(question, def = true) {
       : `Find this computer's local IP (e.g. ${dim('System Settings → Network')}), then visit ${cyan(`http://<that-ip>:${port}/`)} on the other device.`);
     nextSteps.push(`${yellow('Heads up:')} on your Wi-Fi the access token is the only lock. Keep it private; only people on your network can even reach the page.`);
     nextSteps.push(`Easiest on a phone: open the page on this computer, click ${bold('"Connect a device" → Phone')}, and scan the QR.`);
+    if (process.platform === 'win32') nextSteps.push(`${yellow('Windows:')} the first time another device connects, Windows pops a Firewall prompt — click ${bold('Allow')} (at least Private networks) or the page won't load.`);
   } else {
     host = '127.0.0.1'; // the tunnel reaches in; we don't bind to the network directly
     out();
@@ -160,9 +171,15 @@ async function confirm(question, def = true) {
       tunnelProvider = prov.key === '2' ? 'cloudflare-quick' : 'devtunnel';
       const cli = tunnelProvider === 'cloudflare-quick' ? 'cloudflared' : 'devtunnel';
       if (!onPath(cli)) {
-        out(yellow(`   The "${cli}" command isn't installed yet.`));
-        out(`   Install it, then re-run setup. Docs: ${cyan('docs/INSTALL.md')} (Remote access).`);
-        out(dim('   Continuing anyway — the server will fall back to localhost-only if the tunnel cannot start.'));
+        out(yellow(`   The "${cli}" command isn't installed yet — install it, then re-run setup:`));
+        if (cli === 'cloudflared') {
+          if (process.platform === 'darwin') out('     ' + cyan('brew install cloudflared'));
+          else if (process.platform === 'win32') out('     ' + cyan('winget install --id Cloudflare.cloudflared') + dim('   (or grab it from github.com/cloudflare/cloudflared/releases)'));
+          else out('     ' + cyan('https://pkg.cloudflare.com') + dim('   (apt/yum) or github.com/cloudflare/cloudflared/releases'));
+        } else {
+          out('     ' + cyan('https://aka.ms/devtunnels/download') + dim('   then run `devtunnel user login` once'));
+        }
+        out(dim('   Continuing anyway — the server falls back to localhost-only if the tunnel cannot start.'));
       }
       nextSteps.push(`When the tunnel connects, its public ${bold('https://…')} URL prints in the banner below and shows in the UI.`);
       nextSteps.push(`Open that URL on your phone, or use ${bold('"Connect a device" → Phone')} in the UI to scan a QR.`);

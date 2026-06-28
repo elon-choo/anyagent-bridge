@@ -6,6 +6,8 @@ Control your local computer's terminal — and **any** CLI AI coding agent you'v
 
 ## Quick start
 
+First install **Node.js 18+** (the LTS build from <https://nodejs.org>) — `npx` needs it. Then:
+
 ```bash
 # New here? A guided, first-timer setup (checks prerequisites, helps you go mobile):
 npx anyagent-bridge setup
