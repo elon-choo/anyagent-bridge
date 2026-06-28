@@ -39,6 +39,7 @@ before exposing the bridge beyond localhost, and
 - Persistent sessions that survive reconnects, with automatic PTY respawn and backoff.
 - Heartbeat + dead-connection detection so stale viewers get cleaned up.
 - File management API: browse, read, write, rename, move, delete, upload, download — all behind a path whitelist.
+- Add projects by **browsing folders** in the UI (the 📁 Projects button) — no typing full paths.
 - Crash guards (uncaught exceptions, signals) so the server stays up.
 - Constant-time token comparison and basic rate limiting.
 - Optional **login**: Google/GitHub OAuth, TOTP 2FA, and signed expiring sessions on top of the token (Stage 3).

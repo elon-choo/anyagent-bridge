@@ -46,6 +46,10 @@ as you would in your own terminal — streamed live to the browser. Type prompts
 send keys, and watch output in real time. Detaching the browser keeps the session
 alive; reconnecting reattaches with full scrollback.
 
+To scope a session to a folder, click **📁 Projects** in the top bar and *browse* to
+it — no typing the path. Saved projects appear in the toolbar dropdown; pick one
+before you launch the agent.
+
 ![Claude Code running inside a bridge session](screenshots/03-agent-running.png)
 
 ## 4. Browse and edit files

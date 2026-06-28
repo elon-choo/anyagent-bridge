@@ -146,6 +146,34 @@
   #onboard .warn { color: var(--yellow); }
   #onboard .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
   #onboard .muted { color: var(--muted); font-size: 12px; }
+
+  /* Projects — folder-browser picker */
+  #projModal { position: fixed; inset: 0; z-index: 60; background: rgba(13,17,23,.96); display: none; align-items: center; justify-content: center; padding: 18px; }
+  #projModal.open { display: flex; }
+  #projModal .card { position: relative; background: var(--bar); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px 22px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  #projModal h2 { margin: 0 0 2px; font-size: 17px; }
+  #projModal .sub { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  #projModal .pm-close { position: absolute; top: 12px; right: 14px; background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+  #projModal .pm-close:hover { color: var(--fg); }
+  #projModal .pm-list { list-style: none; margin: 0 0 12px; padding: 0; }
+  #projModal .pm-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; }
+  #projModal .pm-nm { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  #projModal .pm-pa { font-size: 11px; color: var(--muted); word-break: break-all; flex: 1; }
+  #projModal .pm-del { background: transparent; border: none; color: var(--red); cursor: pointer; font-size: 14px; padding: 0 4px; }
+  #projModal .pm-empty { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  #projModal .pm-add { border-top: 1px solid var(--border); padding-top: 12px; }
+  #projModal .pm-add h3 { margin: 0 0 8px; font-size: 13px; }
+  #projModal .pm-crumb { font-size: 12px; color: var(--accent); word-break: break-all; margin: 0 0 6px; }
+  #projModal .pm-browser { border: 1px solid var(--border); border-radius: 7px; max-height: 190px; overflow-y: auto; margin-bottom: 8px; background: #0d1117; }
+  #projModal .pm-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 13px; border-bottom: 1px solid rgba(48,54,61,.5); }
+  #projModal .pm-row:last-child { border-bottom: none; }
+  #projModal .pm-row:hover { background: #161b22; }
+  #projModal .pm-row.up { color: var(--muted); }
+  #projModal .pm-sel { font-size: 12px; color: var(--fg); margin: 0 0 8px; word-break: break-all; }
+  #projModal .pm-sel b { color: var(--green); }
+  #projModal .pm-fields { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #projModal .pm-fields input { flex: 1; min-width: 150px; }
+  #projModal .pm-err { color: var(--red); font-size: 12px; min-height: 15px; margin: 6px 0 0; }
 </style>
 </head>
 <body>
@@ -156,6 +184,7 @@
     <button id="startBtn">Start</button>
     <button id="connectBtn" title="Open on a phone or another device">📱 Connect a device</button>
     <select id="projectSel" title="Project" style="display:none"></select>
+    <button id="projBtn" title="Add or manage projects by browsing folders">📁 Projects</button>
     <span class="spacer"></span>
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
   </div>
@@ -204,6 +233,27 @@
     </div>
     <div class="blk">
       <p class="warn">Beyond this computer, the access token is the only lock until you turn on login — set up login / 2FA / OAuth and read <code>docs/SECURITY.md</code> before exposing it.</p>
+    </div>
+  </div>
+</div>
+
+<div id="projModal">
+  <div class="card">
+    <button class="pm-close" id="pmClose" aria-label="Close">×</button>
+    <h2>Projects</h2>
+    <p class="sub">A project scopes an agent session to a folder. Add one by browsing — no typing the full path.</p>
+    <ul class="pm-list" id="pmList"></ul>
+    <p class="pm-empty" id="pmEmpty" style="display:none">No projects yet.</p>
+    <div class="pm-add">
+      <h3>Add a project</h3>
+      <p class="pm-crumb" id="pmCrumb">…</p>
+      <div class="pm-browser" id="pmBrowser"></div>
+      <p class="pm-sel">Selected folder: <b id="pmSel">…</b></p>
+      <div class="pm-fields">
+        <input id="pmName" type="text" placeholder="project name" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <button class="primary" id="pmAdd">Add project</button>
+      </div>
+      <p class="pm-err" id="pmErr"></p>
     </div>
   </div>
 </div>
@@ -648,6 +698,107 @@
   obClose.addEventListener("click", closeOnboard);
   onboard.addEventListener("click", (e) => { if (e.target === onboard) closeOnboard(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && onboard.classList.contains("open")) closeOnboard(); });
+
+  // ---------- Projects: folder-browser picker (reuses GET /api/browse) ----------
+  const projBtn = $("projBtn"), projModal = $("projModal"), pmClose = $("pmClose");
+  let pmCurrent = null;
+  function pmBasename(p) { return p.replace(/[\/\\]+$/, "").split(/[\/\\]/).pop() || p; }
+  async function pmBrowse(p) {
+    const browser = $("pmBrowser"), err = $("pmErr");
+    err.textContent = "";
+    // Raw fetch (not api()) so the server's own message survives a 403 — e.g. a
+    // folder outside the configured allowedPaths returns "Access denied", which is
+    // far more useful than a generic "unauthorized".
+    let res, data;
+    try {
+      res = await fetch("/api/browse" + (p ? "?path=" + encodeURIComponent(p) : ""),
+        { credentials: "include", headers: token ? { Authorization: "Bearer " + token } : {} });
+      data = await res.json().catch(() => ({}));
+    } catch (e) { err.textContent = "Could not reach the server."; return; }
+    if (res.status === 401) { err.textContent = "Session expired — reload to log in again."; return; }
+    if (!res.ok || data.error) { err.textContent = data.error || ("Could not open that folder (HTTP " + res.status + ")."); return; }
+    pmCurrent = data.current;
+    $("pmCrumb").textContent = data.current;
+    $("pmSel").textContent = data.current;
+    // keep the name field in sync with the folder until the user types their own
+    if ($("pmName").dataset.auto !== "0") {
+      $("pmName").value = pmBasename(data.current);
+      $("pmName").dataset.auto = "1";
+    }
+    browser.innerHTML = "";
+    if (data.parent) {
+      const up = document.createElement("div");
+      up.className = "pm-row up"; up.textContent = "⬆  ..";
+      up.addEventListener("click", () => pmBrowse(data.parent));
+      browser.appendChild(up);
+    }
+    if (!data.folders.length) {
+      const none = document.createElement("div");
+      none.className = "pm-row"; none.style.cursor = "default"; none.textContent = "(no subfolders here)";
+      browser.appendChild(none);
+    }
+    for (const f of data.folders) {
+      const row = document.createElement("div");
+      row.className = "pm-row"; row.textContent = "📁  " + f.name;
+      row.addEventListener("click", () => pmBrowse(f.path));
+      browser.appendChild(row);
+    }
+  }
+  async function pmLoadList() {
+    const ul = $("pmList");
+    ul.innerHTML = "";
+    let list = [];
+    try { const d = await api("/api/projects"); list = d.projects || []; } catch (_) {}
+    $("pmEmpty").style.display = list.length ? "none" : "";
+    for (const p of list) {
+      const li = document.createElement("li");
+      const nm = document.createElement("span"); nm.className = "pm-nm"; nm.textContent = p.name;
+      const pa = document.createElement("span"); pa.className = "pm-pa"; pa.textContent = p.path;
+      const del = document.createElement("button"); del.className = "pm-del"; del.textContent = "✕"; del.title = "Remove";
+      del.addEventListener("click", () => pmDelete(p.name));
+      li.appendChild(nm); li.appendChild(pa); li.appendChild(del);
+      ul.appendChild(li);
+    }
+  }
+  async function pmAddProject() {
+    const err = $("pmErr"), name = $("pmName").value.trim();
+    if (!pmCurrent) { err.textContent = "Pick a folder first."; return; }
+    if (!name) { err.textContent = "Give the project a name."; return; }
+    err.textContent = "";
+    let res, data;
+    try {
+      res = await fetch("/api/projects", { method: "POST", credentials: "include",
+        headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: "Bearer " + token } : {}),
+        body: JSON.stringify({ name: name, path: pmCurrent }) });
+      data = await res.json().catch(() => ({}));
+    } catch (e) { err.textContent = "Network error."; return; }
+    if (!res.ok || data.error) { err.textContent = data.error || ("HTTP " + res.status); return; }
+    $("pmName").value = ""; $("pmName").dataset.auto = "1";
+    await pmLoadList();
+    try { await loadProjects(); } catch (_) {}   // refresh the toolbar dropdown
+  }
+  async function pmDelete(name) {
+    try {
+      await fetch("/api/projects/" + encodeURIComponent(name), { method: "DELETE", credentials: "include",
+        headers: token ? { Authorization: "Bearer " + token } : {} });
+    } catch (_) {}
+    await pmLoadList();
+    try { await loadProjects(); } catch (_) {}
+  }
+  function openProjects() {
+    projModal.classList.add("open");
+    $("pmErr").textContent = "";
+    $("pmName").value = ""; $("pmName").dataset.auto = "1";
+    pmLoadList();
+    pmBrowse(null);   // start at the server's home / first allowed base
+  }
+  function closeProjects() { projModal.classList.remove("open"); }
+  $("pmName").addEventListener("input", () => { $("pmName").dataset.auto = "0"; });
+  projBtn.addEventListener("click", openProjects);
+  pmClose.addEventListener("click", closeProjects);
+  projModal.addEventListener("click", (e) => { if (e.target === projModal) closeProjects(); });
+  $("pmAdd").addEventListener("click", pmAddProject);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && projModal.classList.contains("open")) closeProjects(); });
 
   // ---------- Bootstrap ----------
   (async function boot() {

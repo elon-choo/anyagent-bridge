@@ -82,6 +82,10 @@ dropdown in the top bar (e.g. **Claude Code**) and click **Start** — it runs i
 the session, streamed live to your browser. Detaching the browser keeps it alive;
 reconnect and you're back with full scrollback.
 
+To run the agent inside a specific **project folder**, click **📁 Projects** in the
+top bar and *browse* to the folder — no typing the full path. It's saved and shows
+up in the toolbar's project dropdown; pick one before launching.
+
 ## If something goes wrong
 
 - **`node -v` says command not found** — install Node.js (above), then reopen the
