@@ -86,6 +86,10 @@ To run the agent inside a specific **project folder**, click **📁 Projects** i
 top bar and *browse* to the folder — no typing the full path. It's saved and shows
 up in the toolbar's project dropdown; pick one before launching.
 
+If the agent needs API keys (e.g. `OPENAI_API_KEY`), click **🔑 Secrets**, pick the
+project, and add `KEY` + value — it's written to that project's `.env.local` for you,
+so you never paste keys into the chat or hand-edit dotfiles.
+
 ## If something goes wrong
 
 - **`node -v` says command not found** — install Node.js (above), then reopen the

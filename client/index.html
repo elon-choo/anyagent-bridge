@@ -174,6 +174,31 @@
   #projModal .pm-fields { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   #projModal .pm-fields input { flex: 1; min-width: 150px; }
   #projModal .pm-err { color: var(--red); font-size: 12px; min-height: 15px; margin: 6px 0 0; }
+
+  /* Secrets — per-project .env.local editor */
+  #secModal { position: fixed; inset: 0; z-index: 60; background: rgba(13,17,23,.96); display: none; align-items: center; justify-content: center; padding: 18px; }
+  #secModal.open { display: flex; }
+  #secModal .card { position: relative; background: var(--bar); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px 22px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  #secModal h2 { margin: 0 0 2px; font-size: 17px; }
+  #secModal h2 .dim { color: var(--muted); font-weight: 400; font-size: 14px; }
+  #secModal .sub { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  #secModal .pm-close { position: absolute; top: 12px; right: 14px; background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+  #secModal .pm-close:hover { color: var(--fg); }
+  #secModal .pm-empty { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; line-height: 1.5; }
+  #secModal .sec-field { margin-bottom: 8px; }
+  #secModal .sec-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  #secModal .sec-field select { width: 100%; }
+  #secModal .sec-target { font-size: 12px; color: var(--muted); margin: 0 0 10px; word-break: break-all; }
+  #secModal .sec-list { list-style: none; margin: 0 0 10px; padding: 0; }
+  #secModal .sec-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; }
+  #secModal .sec-k { font-size: 12.5px; font-weight: 600; word-break: break-all; }
+  #secModal .sec-v { font-size: 12px; color: var(--muted); flex: 1; font-family: Menlo, Monaco, monospace; word-break: break-all; }
+  #secModal .sec-eye, #secModal .sec-del { background: transparent; border: none; cursor: pointer; font-size: 13px; padding: 0 3px; }
+  #secModal .sec-del { color: var(--red); }
+  #secModal .sec-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #secModal .sec-add input { flex: 1; min-width: 130px; }
+  #secModal .pm-err { color: var(--red); font-size: 12px; min-height: 15px; margin: 6px 0 0; }
+  #secModal .sec-note { font-size: 11px; color: var(--muted); margin: 8px 0 0; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -185,6 +210,7 @@
     <button id="connectBtn" title="Open on a phone or another device">📱 Connect a device</button>
     <select id="projectSel" title="Project" style="display:none"></select>
     <button id="projBtn" title="Add or manage projects by browsing folders">📁 Projects</button>
+    <button id="secBtn" title="Save API keys / tokens into a project's .env.local">🔑 Secrets</button>
     <span class="spacer"></span>
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
   </div>
@@ -254,6 +280,31 @@
         <button class="primary" id="pmAdd">Add project</button>
       </div>
       <p class="pm-err" id="pmErr"></p>
+    </div>
+  </div>
+</div>
+
+<div id="secModal">
+  <div class="card">
+    <button class="pm-close" id="secClose" aria-label="Close">×</button>
+    <h2>Secrets <span class="dim">(.env.local)</span></h2>
+    <p class="sub">Save API keys and tokens into a project's <code>.env.local</code> — the agent you launch there reads them. They go straight to a file, never through the chat or terminal.</p>
+    <p class="pm-empty" id="secNoProj" style="display:none">Add a project first with the <b>📁 Projects</b> button — secrets are saved into a project folder.</p>
+    <div id="secEditor">
+      <div class="sec-field">
+        <label for="secProj">Project folder</label>
+        <select id="secProj"></select>
+      </div>
+      <p class="sec-target">Writes to <code id="secTarget">…</code></p>
+      <ul class="sec-list" id="secList"></ul>
+      <p class="pm-empty" id="secEmpty" style="display:none">No keys yet.</p>
+      <div class="sec-add">
+        <input id="secKey" type="text" placeholder="KEY (e.g. OPENAI_API_KEY)" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        <input id="secVal" type="password" placeholder="value" autocomplete="off" spellcheck="false" />
+        <button class="primary" id="secAdd">Save</button>
+      </div>
+      <p class="pm-err" id="secErr"></p>
+      <p class="sec-note">Stored unencrypted in the project folder, like any <code>.env</code> — anyone who can read that folder can read these.</p>
     </div>
   </div>
 </div>
@@ -799,6 +850,151 @@
   projModal.addEventListener("click", (e) => { if (e.target === projModal) closeProjects(); });
   $("pmAdd").addEventListener("click", pmAddProject);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && projModal.classList.contains("open")) closeProjects(); });
+
+  // ---------- Secrets: write API keys into a project's .env.local ----------
+  const secBtn = $("secBtn"), secModal = $("secModal"), secClose = $("secClose");
+  let secRaw = "";      // current raw .env.local text for the selected project
+  let secPath = null;   // absolute path of that .env.local
+  let secLoadFailed = false;  // true when the existing file couldn't be read → block writes so we never clobber it
+  const VALID_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+  function secStripQuotes(v) {
+    v = v.trim();
+    if (v.length >= 2 && ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))) return v.slice(1, -1);
+    return v;
+  }
+  function secParse(raw) {
+    const out = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+      if (m) out.push({ key: m[1], value: secStripQuotes(m[2]) });
+    }
+    return out;
+  }
+  function secFormatValue(v) {
+    // bare when safe, else double-quote with escaping — so a value can never inject a new line/var
+    return /^[A-Za-z0-9_./:@+-]*$/.test(v) ? v : '"' + v.replace(/(["\\])/g, "\\$1") + '"';
+  }
+  function secSetLine(raw, key, value) {
+    const lines = raw.split(/\r?\n/);
+    const re = new RegExp("^\\s*" + key + "\\s*=");   // key is VALID_KEY-checked → no regex injection
+    const newLine = key + "=" + secFormatValue(value);
+    let replaced = false;
+    for (let i = 0; i < lines.length; i++) { if (re.test(lines[i])) { lines[i] = newLine; replaced = true; break; } }
+    if (!replaced) {
+      if (lines.length && lines[lines.length - 1].trim() === "") lines[lines.length - 1] = newLine;
+      else lines.push(newLine);
+    }
+    return lines.join("\n").replace(/\n*$/, "\n");
+  }
+  function secDelLine(raw, key) {
+    const re = new RegExp("^\\s*" + key + "\\s*=");
+    return raw.split(/\r?\n/).filter((l) => !re.test(l)).join("\n").replace(/\n*$/, "\n");
+  }
+
+  async function secLoadProjects() {
+    const sel = $("secProj");
+    sel.innerHTML = "";
+    let list = [];
+    try { const d = await api("/api/projects"); list = d.projects || []; } catch (_) {}
+    if (!list.length) { $("secNoProj").style.display = ""; $("secEditor").style.display = "none"; return; }
+    $("secNoProj").style.display = "none"; $("secEditor").style.display = "";
+    for (const p of list) {
+      const o = document.createElement("option");
+      o.value = p.path; o.textContent = p.name + "  (" + p.path + ")";
+      sel.appendChild(o);
+    }
+    if (projectSel && projectSel.value && [...sel.options].some((o) => o.value === projectSel.value)) sel.value = projectSel.value;
+    await secLoadEnv();
+  }
+  function secSetEnabled(on) {
+    $("secKey").disabled = !on; $("secVal").disabled = !on; $("secAdd").disabled = !on;
+  }
+  async function secLoadEnv() {
+    secPath = $("secProj").value.replace(/[\/\\]+$/, "") + "/.env.local";
+    $("secTarget").textContent = secPath;
+    $("secErr").textContent = "";
+    secRaw = "";
+    secLoadFailed = false;
+    // Distinguish "no file yet" (404 → a fresh file is fine) from a real read failure.
+    // On any other error we do NOT know the current contents, so we block editing —
+    // otherwise the next Save would write only the new key and wipe the rest.
+    let res;
+    try {
+      res = await fetch("/api/explorer/read?path=" + encodeURIComponent(secPath),
+        { credentials: "include", headers: token ? { Authorization: "Bearer " + token } : {} });
+    } catch (e) {
+      secLoadFailed = true;
+      $("secErr").textContent = "Couldn't reach the server — editing disabled so existing keys stay safe.";
+      secSetEnabled(false); secRender(); return;
+    }
+    if (res.status === 404) {
+      secRaw = "";                       // no .env.local yet
+    } else if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      secRaw = typeof data.content === "string" ? data.content : "";
+    } else {
+      secLoadFailed = true;
+      $("secErr").textContent = res.status === 401
+        ? "Session expired — reload to log in again."
+        : "Couldn't read this folder's .env.local — editing disabled so existing keys aren't overwritten.";
+      secSetEnabled(false); secRender(); return;
+    }
+    secSetEnabled(true);
+    secRender();
+  }
+  function secRender() {
+    const ul = $("secList");
+    ul.innerHTML = "";
+    const entries = secParse(secRaw);
+    $("secEmpty").style.display = entries.length ? "none" : "";
+    for (const e of entries) {
+      const li = document.createElement("li");
+      const k = document.createElement("span"); k.className = "sec-k"; k.textContent = e.key;
+      const v = document.createElement("span"); v.className = "sec-v"; v.textContent = "••••••••"; v.dataset.real = e.value; v.dataset.shown = "0";
+      const eye = document.createElement("button"); eye.className = "sec-eye"; eye.textContent = "👁"; eye.title = "Show / hide";
+      eye.addEventListener("click", () => { const sh = v.dataset.shown === "1"; v.textContent = sh ? "••••••••" : (v.dataset.real || "(empty)"); v.dataset.shown = sh ? "0" : "1"; });
+      const del = document.createElement("button"); del.className = "sec-del"; del.textContent = "✕"; del.title = "Remove";
+      del.addEventListener("click", () => secRemove(e.key));
+      li.appendChild(k); li.appendChild(v); li.appendChild(eye); li.appendChild(del);
+      ul.appendChild(li);
+    }
+  }
+  async function secWrite() {
+    const res = await fetch("/api/explorer/write", { method: "POST", credentials: "include",
+      headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: "Bearer " + token } : {}),
+      body: JSON.stringify({ path: secPath, content: secRaw }) });
+    if (res.status === 401) { closeSecrets(); showGate("Session expired — please log in again."); throw new Error("session expired"); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) throw new Error(data.error || ("HTTP " + res.status));
+  }
+  async function secAdd() {
+    const err = $("secErr"), key = $("secKey").value.trim();
+    if (secLoadFailed) { err.textContent = "Can't save — the current .env.local couldn't be read. Re-open Secrets and try again."; return; }
+    if (!VALID_KEY.test(key)) { err.textContent = "Key must be letters/digits/underscores, e.g. OPENAI_API_KEY."; return; }
+    const val = $("secVal").value.replace(/[\r\n]+/g, "");   // a secret is single-line
+    err.textContent = "";
+    const prev = secRaw;
+    secRaw = secSetLine(secRaw, key, val);
+    try { await secWrite(); } catch (e) { secRaw = prev; err.textContent = "Could not save: " + e.message; return; }
+    $("secKey").value = ""; $("secVal").value = "";
+    secRender();
+  }
+  async function secRemove(key) {
+    const prev = secRaw;
+    secRaw = secDelLine(secRaw, key);
+    try { await secWrite(); } catch (e) { secRaw = prev; $("secErr").textContent = "Could not save: " + e.message; return; }
+    secRender();
+  }
+  function openSecrets() { secModal.classList.add("open"); $("secErr").textContent = ""; $("secKey").value = ""; $("secVal").value = ""; secLoadProjects(); }
+  function closeSecrets() { secModal.classList.remove("open"); }
+  secBtn.addEventListener("click", openSecrets);
+  secClose.addEventListener("click", closeSecrets);
+  secModal.addEventListener("click", (e) => { if (e.target === secModal) closeSecrets(); });
+  $("secProj").addEventListener("change", secLoadEnv);
+  $("secAdd").addEventListener("click", secAdd);
+  $("secVal").addEventListener("keydown", (e) => { if (e.key === "Enter") secAdd(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && secModal.classList.contains("open")) closeSecrets(); });
 
   // ---------- Bootstrap ----------
   (async function boot() {
