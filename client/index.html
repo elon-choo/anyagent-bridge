@@ -199,6 +199,51 @@
   #secModal .sec-add input { flex: 1; min-width: 130px; }
   #secModal .pm-err { color: var(--red); font-size: 12px; min-height: 15px; margin: 6px 0 0; }
   #secModal .sec-note { font-size: 11px; color: var(--muted); margin: 8px 0 0; line-height: 1.5; }
+
+  /* Files — explorer + code/markdown editor */
+  #fileExp { position: fixed; inset: 0; z-index: 70; background: rgba(13,17,23,.98); display: none; }
+  #fileExp.open { display: flex; flex-direction: column; }
+  #fileExp .fx-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--border); background: var(--bar); }
+  #fileExp .fx-head h2 { margin: 0; font-size: 16px; white-space: nowrap; }
+  #fileExp .fx-crumb { color: var(--muted); font-size: 12px; font-family: Menlo, monospace; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fileExp .fx-tools { display: flex; gap: 8px; }
+  #fileExp button.fx-btn { background: #21262d; border: 1px solid var(--border); color: var(--fg); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+  #fileExp button.fx-btn:hover { background: #2d333b; }
+  #fileExp button.fx-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #fileExp button.fx-btn.danger:hover { color: var(--red); }
+  #fileExp .fx-close { background: transparent; border: none; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; padding: 0 6px; }
+  #fileExp .fx-close:hover { color: var(--fg); }
+  #fileExp .fx-body { flex: 1; display: flex; min-height: 0; }
+  #fileExp .fx-tree { width: 320px; border-right: 1px solid var(--border); overflow-y: auto; padding: 8px; background: var(--bg); }
+  #fileExp .fx-row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  #fileExp .fx-row:hover { background: var(--bar); }
+  #fileExp .fx-row.up { color: var(--muted); }
+  #fileExp .fx-row.active { background: rgba(47,129,247,.18); }
+  #fileExp .fx-row .fx-nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fileExp .fx-row .fx-act { opacity: 0; display: flex; gap: 3px; }
+  #fileExp .fx-row:hover .fx-act { opacity: 1; }
+  #fileExp .fx-row .fx-act button { background: transparent; border: none; cursor: pointer; font-size: 12px; padding: 0 2px; }
+  #fileExp .fx-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #fileExp .fx-editbar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--bar); }
+  #fileExp .fx-fname { font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fileExp .fx-fname.dirty::after { content: " ●"; color: var(--yellow); }
+  #fileExp .fx-modes { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  #fileExp .fx-modes button { background: transparent; border: none; color: var(--muted); padding: 5px 11px; font-size: 12px; cursor: pointer; }
+  #fileExp .fx-modes button.on { background: var(--accent); color: #fff; }
+  #fileExp .fx-edit { flex: 1; display: flex; min-height: 0; }
+  #fileExp textarea.fx-ta { flex: 1; background: var(--bg); color: var(--fg); border: none; resize: none; padding: 16px 18px; font-family: Menlo, Monaco, monospace; font-size: 13px; line-height: 1.65; outline: none; tab-size: 2; }
+  #fileExp .fx-prev { flex: 1; overflow-y: auto; padding: 20px 30px; background: var(--bg); border-left: 1px solid var(--border); line-height: 1.7; }
+  #fileExp .fx-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; padding: 24px; text-align: center; }
+  .fx-prev h1, .fx-prev h2, .fx-prev h3 { border-bottom: 1px solid var(--border); padding-bottom: .25em; margin-top: 1.1em; }
+  .fx-prev code { background: #161b22; padding: 2px 5px; border-radius: 4px; font-size: 85%; }
+  .fx-prev pre { background: #161b22; padding: 12px 14px; border-radius: 8px; overflow-x: auto; }
+  .fx-prev pre code { background: none; padding: 0; }
+  .fx-prev a { color: var(--accent); }
+  .fx-prev blockquote { border-left: 3px solid var(--accent); margin: 0; padding-left: 14px; color: var(--muted); }
+  .fx-prev ul, .fx-prev ol { padding-left: 1.4em; }
+  .fx-prev table { border-collapse: collapse; } .fx-prev th, .fx-prev td { border: 1px solid var(--border); padding: 6px 10px; }
+  .fx-prev img { max-width: 100%; }
+  @media (max-width: 760px) { #fileExp .fx-tree { width: 42%; } #fileExp .fx-prev { display: none !important; } }
 </style>
 </head>
 <body>
@@ -211,6 +256,7 @@
     <select id="projectSel" title="Project" style="display:none"></select>
     <button id="projBtn" title="Add or manage projects by browsing folders">📁 Projects</button>
     <button id="secBtn" title="Save API keys / tokens into a project's .env.local">🔑 Secrets</button>
+    <button id="filesBtn" title="Browse and edit files — code & markdown">📂 Files</button>
     <span class="spacer"></span>
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
   </div>
@@ -305,6 +351,41 @@
       </div>
       <p class="pm-err" id="secErr"></p>
       <p class="sec-note">Stored unencrypted in the project folder, like any <code>.env</code> — anyone who can read that folder can read these.</p>
+    </div>
+  </div>
+</div>
+
+<div id="fileExp">
+  <div class="fx-head">
+    <h2>📂 Files</h2>
+    <span class="fx-crumb" id="fxCrumb">…</span>
+    <div class="fx-tools">
+      <button class="fx-btn" id="fxNewFile">📄 New file</button>
+      <button class="fx-btn" id="fxNewFolder">📁 New folder</button>
+      <button class="fx-btn" id="fxRefresh" title="Refresh">↻</button>
+    </div>
+    <button class="fx-close" id="fxClose" aria-label="Close">×</button>
+  </div>
+  <div class="fx-body">
+    <div class="fx-tree" id="fxTree"></div>
+    <div class="fx-main">
+      <div class="fx-editbar" id="fxEditbar" style="display:none">
+        <span class="fx-fname" id="fxFname">…</span>
+        <div class="fx-modes" id="fxModes">
+          <button data-mode="edit" class="on">Edit</button>
+          <button data-mode="split">Split</button>
+          <button data-mode="preview">Preview</button>
+        </div>
+        <button class="fx-btn primary" id="fxSave">Save</button>
+        <button class="fx-btn" id="fxDownload" title="Download">⬇</button>
+        <button class="fx-btn" id="fxRename" title="Rename">✏</button>
+        <button class="fx-btn danger" id="fxDelete" title="Delete">🗑</button>
+      </div>
+      <div class="fx-edit" id="fxEdit">
+        <div class="fx-empty" id="fxEmpty">← Pick a file to open it, or create a new one.</div>
+        <textarea class="fx-ta" id="fxTa" style="display:none" spellcheck="false" autocomplete="off"></textarea>
+        <div class="fx-prev" id="fxPrev" style="display:none"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -995,6 +1076,176 @@
   $("secAdd").addEventListener("click", secAdd);
   $("secVal").addEventListener("keydown", (e) => { if (e.key === "Enter") secAdd(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && secModal.classList.contains("open")) closeSecrets(); });
+
+  // ---------- Files: explorer + code/markdown editor ----------
+  (function setupFiles() {
+    const fileExp = $("fileExp"), fxTree = $("fxTree"), fxCrumb = $("fxCrumb");
+    const fxTa = $("fxTa"), fxPrev = $("fxPrev"), fxEmpty = $("fxEmpty");
+    const fxEditbar = $("fxEditbar"), fxFname = $("fxFname"), fxModes = $("fxModes");
+    let fxCwd = null, fxFile = null, fxDirty = false, fxMode = "edit", mdReady = null, flashT = null, fxOpenedContent = null;
+
+    function aFetch(p, opts) {
+      opts = opts || {};
+      opts.credentials = "include";
+      opts.headers = Object.assign(opts.headers || {}, token ? { Authorization: "Bearer " + token } : {});
+      return fetch(p, opts);
+    }
+    function onAuthErr() { closeFiles(true); showGate("Session expired — please log in again."); }
+
+    async function loadTree(p) {
+      try {
+        const r = await aFetch("/api/explorer/tree" + (p ? "?path=" + encodeURIComponent(p) : ""));
+        if (r.status === 401 || r.status === 403) return onAuthErr();
+        const d = await r.json();
+        if (d.error) { fxTree.textContent = d.error; return; }
+        fxCwd = d.path; fxCrumb.textContent = d.path;
+        fxTree.innerHTML = "";
+        if (d.parent) {
+          const up = document.createElement("div"); up.className = "fx-row up";
+          up.innerHTML = '<span>⬆</span>'; const u = document.createElement("span"); u.className = "fx-nm"; u.textContent = ".."; up.appendChild(u);
+          up.addEventListener("click", () => loadTree(d.parent)); fxTree.appendChild(up);
+        }
+        for (const it of d.items) {
+          const row = document.createElement("div"); row.className = "fx-row" + (fxFile && it.path === fxFile ? " active" : "");
+          const ic = document.createElement("span"); ic.textContent = it.isDirectory ? "📁" : (it.type === "markdown" ? "📝" : "📄"); row.appendChild(ic);
+          const nm = document.createElement("span"); nm.className = "fx-nm"; nm.textContent = it.name; row.appendChild(nm);
+          const act = document.createElement("span"); act.className = "fx-act";
+          const rn = document.createElement("button"); rn.textContent = "✏"; rn.title = "Rename";
+          rn.addEventListener("click", (e) => { e.stopPropagation(); renameItem(it); });
+          const dl = document.createElement("button"); dl.textContent = "🗑"; dl.title = "Delete";
+          dl.addEventListener("click", (e) => { e.stopPropagation(); deleteItem(it); });
+          act.appendChild(rn); act.appendChild(dl); row.appendChild(act);
+          row.addEventListener("click", () => { if (it.isDirectory) loadTree(it.path); else openFile(it.path); });
+          fxTree.appendChild(row);
+        }
+      } catch (e) { if (!fxTree.children.length) fxTree.textContent = "Network error — tap ↻ to retry."; }
+    }
+
+    async function openFile(p) {
+      if (fxDirty && !confirm("Discard unsaved changes?")) return;
+      try {
+        const r = await aFetch("/api/explorer/read?path=" + encodeURIComponent(p));
+        if (r.status === 401 || r.status === 403) return onAuthErr();
+        const d = await r.json();
+        if (!d.success) { alert(d.error || "Could not open file"); return; }
+        fxFile = d.path; fxDirty = false;
+        fxFname.textContent = d.name; fxFname.classList.remove("dirty");
+        fxTa.value = d.content; fxOpenedContent = d.content; fxEditbar.style.display = ""; fxEmpty.style.display = "none";
+        const md = /\.(md|markdown)$/i.test(d.name);
+        fxModes.style.display = md ? "" : "none";
+        setMode(md ? fxMode : "edit");
+        loadTree(fxCwd);
+      } catch (e) { alert("Could not open file — network error."); }
+    }
+
+    function setMode(m) {
+      fxMode = m; fxEmpty.style.display = "none";
+      [].forEach.call(fxModes.children, (b) => b.classList.toggle("on", b.dataset.mode === m));
+      if (m === "edit") { fxTa.style.display = ""; fxPrev.style.display = "none"; }
+      else if (m === "preview") { fxTa.style.display = "none"; fxPrev.style.display = ""; renderPreview(); }
+      else { fxTa.style.display = ""; fxPrev.style.display = ""; renderPreview(); }
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve) => {
+        const s = document.createElement("script");
+        s.src = src; s.onload = () => resolve(true); s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+      });
+    }
+    function loadMd() {
+      if (mdReady) return mdReady;
+      mdReady = (async () => {
+        if (!window.marked) await loadScript("https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js");
+        if (!window.DOMPurify) await loadScript("https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js");
+      })();
+      return mdReady;
+    }
+    function showRaw() { const pre = document.createElement("pre"); pre.textContent = fxTa.value; fxPrev.innerHTML = ""; fxPrev.appendChild(pre); }
+    async function renderPreview() {
+      await loadMd();
+      // Render markdown, then ALWAYS sanitize before inserting. The bridge can be shared
+      // over a tunnel / multiple viewers, so a malicious .md must never run script. If
+      // either library failed to load, fall back to raw text — never unsanitized HTML.
+      if (window.marked && window.DOMPurify) {
+        try { fxPrev.innerHTML = window.DOMPurify.sanitize(window.marked.parse(fxTa.value)); return; } catch (_) {}
+      }
+      showRaw();
+    }
+
+    fxTa.addEventListener("input", () => { fxDirty = true; fxFname.classList.add("dirty"); if (fxMode !== "edit") renderPreview(); });
+
+    async function save() {
+      if (!fxFile) return;
+      try {
+        // Guard against silently clobbering an external change — the terminal or an
+        // agent may have edited the same file since we opened it.
+        if (fxOpenedContent !== null) {
+          try {
+            const cur = await aFetch("/api/explorer/read?path=" + encodeURIComponent(fxFile));
+            if (cur.ok) {
+              const cd = await cur.json();
+              if (cd.success && cd.content !== fxOpenedContent && cd.content !== fxTa.value &&
+                  !confirm("This file changed on disk since you opened it (the terminal or an agent may have edited it). Overwrite with your version?")) return;
+            }
+          } catch (_) { /* the change-check is best-effort; proceed to save */ }
+        }
+        const r = await aFetch("/api/explorer/write", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: fxFile, content: fxTa.value }) });
+        if (r.status === 401 || r.status === 403) return onAuthErr();
+        const d = await r.json();
+        if (d.success) { fxDirty = false; fxOpenedContent = fxTa.value; fxFname.classList.remove("dirty"); flash("Saved"); } else alert(d.error || "Save failed");
+      } catch (e) { alert("Save failed"); }
+    }
+    function flash(msg) { const s = $("fxSave"); const o = s.dataset.o || s.textContent; s.dataset.o = o; s.textContent = "✓ " + msg; clearTimeout(flashT); flashT = setTimeout(() => { s.textContent = o; }, 1200); }
+
+    async function newFile() {
+      if (!fxCwd) return; const name = prompt("New file name (e.g. notes.md):"); if (!name) return;
+      const p = fxCwd.replace(/\/$/, "") + "/" + name;
+      const r = await aFetch("/api/file", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: p, content: "" }) });
+      const d = await r.json(); if (d.success) { await loadTree(fxCwd); openFile(p); } else alert(d.error || "Could not create file");
+    }
+    async function newFolder() {
+      if (!fxCwd) return; const name = prompt("New folder name:"); if (!name) return;
+      const p = fxCwd.replace(/\/$/, "") + "/" + name;
+      const r = await aFetch("/api/folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: p }) });
+      const d = await r.json(); if (d.success) loadTree(fxCwd); else alert(d.error || "Could not create folder");
+    }
+    async function renameItem(it) {
+      const nn = prompt("Rename to:", it.name); if (!nn || nn === it.name) return;
+      const np = it.path.slice(0, it.path.length - it.name.length) + nn;
+      const r = await aFetch("/api/explorer/rename", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ oldPath: it.path, newPath: np }) });
+      const d = await r.json(); if (d.success) { if (fxFile === it.path) { fxFile = np; fxFname.textContent = nn; } loadTree(fxCwd); } else alert(d.error || "Rename failed");
+    }
+    async function deleteItem(it) {
+      if (!confirm("Delete " + it.name + (it.isDirectory ? " and everything in it?" : "?"))) return;
+      const r = await aFetch("/api/file?path=" + encodeURIComponent(it.path), { method: "DELETE" });
+      const d = await r.json();
+      if (d.success) { if (fxFile === it.path) { fxFile = null; fxEditbar.style.display = "none"; fxTa.style.display = "none"; fxPrev.style.display = "none"; fxEmpty.style.display = ""; } loadTree(fxCwd); } else alert(d.error || "Delete failed");
+    }
+    function download() {
+      if (!fxFile) return; const blob = new Blob([fxTa.value], { type: "text/plain;charset=utf-8" });
+      const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = fxFname.textContent || "file.txt"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000);
+    }
+
+    function openFiles() { fileExp.classList.add("open"); const start = (projectSel && projectSel.value) || null; loadTree(start || null); }
+    function closeFiles(force) { if (!force && fxDirty && !confirm("Discard unsaved changes?")) return; fileExp.classList.remove("open"); }
+
+    $("filesBtn").addEventListener("click", openFiles);
+    $("fxClose").addEventListener("click", () => closeFiles(false));
+    $("fxRefresh").addEventListener("click", () => loadTree(fxCwd));
+    $("fxNewFile").addEventListener("click", newFile);
+    $("fxNewFolder").addEventListener("click", newFolder);
+    $("fxSave").addEventListener("click", save);
+    $("fxDownload").addEventListener("click", download);
+    $("fxRename").addEventListener("click", () => { if (fxFile) renameItem({ path: fxFile, name: fxFname.textContent, isDirectory: false }); });
+    $("fxDelete").addEventListener("click", () => { if (fxFile) deleteItem({ path: fxFile, name: fxFname.textContent, isDirectory: false }); });
+    [].forEach.call(fxModes.children, (b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+    document.addEventListener("keydown", (e) => {
+      if (!fileExp.classList.contains("open")) return;
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) { e.preventDefault(); save(); }
+      else if (e.key === "Escape" && document.activeElement !== fxTa) closeFiles(false);
+    });
+  })();
 
   // ---------- Bootstrap ----------
   (async function boot() {
