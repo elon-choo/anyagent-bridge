@@ -1,6 +1,6 @@
 {
   "name": "anyagent-bridge",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Control your local terminal and any CLI AI coding agent from a browser, anywhere.",
   "license": "MIT",
   "author": "elon-choo",
