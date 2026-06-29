@@ -2,6 +2,8 @@
 
 Control your local computer's terminal — and **any** CLI AI coding agent you've registered (Claude Code, Codex, aider, …) — from a browser on your phone or another PC, anywhere.
 
+> **🤖 Are you an AI agent someone handed this repo to?** If a person just asked you to "install this" / "set it up" / "run it," follow **[AGENTS.md](AGENTS.md)** top to bottom — the full clone → install → test → launch → verify playbook, with the few steps only a human can do (a browser login, an approval, a phone QR) clearly marked. The person does **not** need to tell you which files to read or what commands to run; it's all in there.
+
 ![anyagent-bridge — a live terminal in the browser](docs/screenshots/02-terminal-view.png)
 
 ## Quick start
@@ -30,18 +32,19 @@ before exposing the bridge beyond localhost, and
 ## Let an AI agent set it up for you
 
 Don't want to touch a terminal? If you already have a **command-capable** AI agent
-(Claude Code or Codex) installed and logged in, hand it this repo and let it do the
-work. Paste this to it:
+(Claude Code or Codex) installed and logged in, just give it this repo's URL and ask it
+to install — that's all. You don't need to know or mention any filenames. Paste something
+like this:
 
-> Install and run **anyagent-bridge** from
-> https://github.com/elon-choo/anyagent-bridge — follow the playbook in its
-> **AGENTS.md**. Do everything you can yourself; only ask me for things you truly
-> can't do (a browser login, an approval, a phone QR scan).
+> Install and run this on my computer for me:
+> https://github.com/elon-choo/anyagent-bridge
+> Do everything you can yourself, and only ask me for the things you genuinely can't do.
 
-It will clone, install, test, launch, and verify the bridge, pausing only for the
-handful of things an AI can't do for you. The exact steps it follows live in
-**[AGENTS.md](AGENTS.md)** (and `CLAUDE.md` points Claude Code at the same playbook),
-so handing the agent just this repo is enough.
+The agent finds the install playbook in the repo on its own — it's in **[AGENTS.md](AGENTS.md)**
+(which Codex reads automatically) and `CLAUDE.md` (which Claude Code reads) — then clones,
+installs, tests, launches, and verifies the bridge, pausing only for the handful of things
+it can't do for you (a browser login, an approval, a phone QR). Handing it just the URL is
+enough.
 
 > Brand-new and have no agent installed yet? Run the wizard yourself instead:
 > `npx anyagent-bridge setup` — it checks prerequisites and helps you install one.
