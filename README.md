@@ -65,6 +65,7 @@ so handing the agent just this repo is enough.
 - Crash guards (uncaught exceptions, signals) so the server stays up.
 - Constant-time token comparison and basic rate limiting.
 - Optional **login**: Google/GitHub OAuth, TOTP 2FA, and signed expiring sessions on top of the token (Stage 3).
+- Boot-time **update check** (anonymous, rate-limited to once/24h, opt-out via `BRIDGE_UPDATE_CHECK=off`) plus a one-line GitHub-star nudge — it only notifies, never auto-updates.
 
 ## Requirements
 
@@ -300,6 +301,7 @@ Status at `GET /api/safety/status` (and folded into `GET /api/system/status`).
 - **Localhost by default.** Out of the box the server binds `127.0.0.1`, so only your own machine can reach it.
 - **The token is the gate.** There is no default password and no default token — one is generated on first boot and persisted to `.data/auth.json`. Keep it secret. If you set `host` to `0.0.0.0`, the token is the *only* thing standing between the internet (or your LAN) and your terminal — the server warns you about this at boot.
 - **No credential injection.** The bridge runs your registered command and nothing more; your AI CLI's own login is used as-is.
+- **One optional outbound call.** The bridge doesn't phone home. The only exception is the update check: at most once per 24h the boot banner makes one anonymous GET to the public npm registry for a newer release (nothing sent but the package name, cached in `.data/update-check.json`, fail-open and non-blocking). It prints a one-line notice and never updates anything. Turn it off with `BRIDGE_UPDATE_CHECK=off` (or `NO_UPDATE_CHECK=1`).
 - **Add a login before exposing it.** Free tunnels (Stage 2), OAuth + 2FA login (Stage 3), and the Docker sandbox / kill-switch / audit / redaction (Stage 4, see [Sandboxing & safety](#sandboxing--safety-stage-4)) are all shipped. If you expose the bridge, require a login, set `callbackBaseUrl`, and set `trustProxy` for your proxy; prefer localhost or a trusted network otherwise. The full security model and disclaimers are in **[docs/SECURITY.md](docs/SECURITY.md)**.
 
 ## Roadmap

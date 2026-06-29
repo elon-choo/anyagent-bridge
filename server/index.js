@@ -1765,6 +1765,16 @@ server.listen(CONFIG.PORT, CONFIG.HOST, () => {
   for (const line of safety.bootSummaryLines()) console.log(line);
   console.log('===============================================================');
 
+  // Friendly extras (opt-out: BRIDGE_UPDATE_CHECK=off): a one-line GitHub-star nudge,
+  // plus an update notice if a cached check already knows a newer release exists. Never
+  // blocks and never auto-updates; the refresh is rate-limited (24h) and fail-open.
+  // See server/updatecheck.js.
+  try {
+    const updates = require('./updatecheck');
+    for (const line of updates.bannerLines(DATA_DIR)) console.log(line);
+    updates.refresh(DATA_DIR);
+  } catch (_) { /* extras are never load-bearing */ }
+
   // Stage 2: start the configured tunnel AFTER the local server is up. The URL
   // arrives asynchronously and never delays listen(). When disabled, the banner
   // above is byte-identical to Stage 1.

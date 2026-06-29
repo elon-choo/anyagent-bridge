@@ -23,6 +23,13 @@ Out of the box the bridge is conservative:
 - **Path whitelist.** The file API is restricted to configured `allowedPaths`
   (your home directory by default), and a denylist blocks secret-bearing dotfiles
   (`.env`, `.npmrc`, SSH keys, cloud-credential files, …).
+- **Almost no outbound network.** The bridge does not phone home. The single
+  exception is an optional update check: at most once per 24h the boot banner makes
+  one anonymous GET to the public npm registry (`registry.npmjs.org`) — no
+  credentials, nothing sent but the package name — caches the result in
+  `.data/update-check.json`, prints a one-line notice if a newer release exists, and
+  never updates anything for you. Disable it with `BRIDGE_UPDATE_CHECK=off` (or
+  `NO_UPDATE_CHECK=1`).
 
 ## Before you expose it (tunnel or `0.0.0.0`)
 
