@@ -16,8 +16,11 @@ on the same computer, another PC, or your phone.
 
 1. **Node.js 18 or newer.** Check by opening a terminal and running `node -v`. No
    Node? Install it from <https://nodejs.org> (the "LTS" button).
-2. **An AI agent CLI, optional but recommended.** e.g. Claude Code:
-   `npm install -g @anthropic-ai/claude-code`, then run `claude` once to log in.
+2. **An AI agent CLI, optional but recommended.** Install whichever you'll use,
+   then run it once to log in:
+   - Claude Code: `npm install -g @anthropic-ai/claude-code`, then run `claude`.
+   - Codex: `npm install -g @openai/codex`, then run `codex`.
+
    Without one you still get a normal shell in the browser; you just can't launch
    an agent until one is installed.
 
@@ -78,7 +81,7 @@ starting an internet tunnel, so you never have to type the long token on a phone
 ## Step 4 — Launch an AI agent
 
 In the web terminal you have a real shell. To start an agent, pick it from the
-dropdown in the top bar (e.g. **Claude Code**) and click **Start** — it runs inside
+dropdown in the top bar (e.g. **Claude Code** or **Codex**) and click **Start** — it runs inside
 the session, streamed live to your browser. Detaching the browser keeps it alive;
 reconnect and you're back with full scrollback.
 
@@ -94,8 +97,11 @@ so you never paste keys into the chat or hand-edit dotfiles.
 
 - **`node -v` says command not found** — install Node.js (above), then reopen the
   terminal.
-- **The agent dropdown is empty** — the agent CLI isn't installed or isn't on your
-  PATH. Verify it runs in the same terminal (e.g. type `claude`).
+- **You clicked Start and the terminal says `command not found` / `is not
+  recognized`** — that agent's CLI isn't installed (or isn't on your PATH). The
+  dropdown lists Claude Code and Codex by default whether or not they're installed,
+  so install the one you picked (`npm install -g @anthropic-ai/claude-code` or
+  `npm install -g @openai/codex`), run it once to log in, then click **Start** again.
 - **"Port already in use"** — something else uses port 3001. Run
   `npx anyagent-bridge --port 8080` (any free number) or re-run `setup`.
 - **The phone QR / tunnel didn't work** — the tunnel CLI may not be installed; see

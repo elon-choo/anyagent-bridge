@@ -120,15 +120,40 @@ async function confirm(question, def = true) {
     out();
     out(yellow('  No AI agent CLI was found. The bridge still runs (you get a plain shell),'));
     out(yellow('  but to launch an agent you need one installed.'));
-    const wantClaude = await confirm('  Install Claude Code now (npm i -g @anthropic-ai/claude-code)?', false);
-    if (wantClaude) {
-      out(dim('  Installing via npm — this may take a minute…'));
-      const r = spawnSync('npm', ['install', '-g', '@anthropic-ai/claude-code'],
-        { stdio: 'inherit', shell: process.platform === 'win32' });
-      if (r.status === 0) out(green('  ✓ Installed. Run `claude` once in a terminal to log in, then it shows up here.'));
-      else out(yellow('  Install didn\'t finish — do it manually: ') + cyan('npm install -g @anthropic-ai/claude-code'));
+    // Verified global-install commands, one per registered agent. The binaries
+    // (claude / codex) match the `command` values the server registers, so the
+    // agent shows up in the dropdown once installed and logged in.
+    const INSTALL = {
+      claude: { label: 'Claude Code', pkg: '@anthropic-ai/claude-code', bin: 'claude' },
+      codex: { label: 'Codex', pkg: '@openai/codex', bin: 'codex' },
+    };
+    if (AUTO || !process.stdin.isTTY) {
+      // Non-interactive: we can't know which agent the user wants and won't install
+      // globally without an explicit yes — so just print both verified commands.
+      out('  Install whichever you want, then run it once to log in:');
+      out('    ' + cyan(`npm install -g ${INSTALL.claude.pkg}`) + dim('   → then run `claude`'));
+      out('    ' + cyan(`npm install -g ${INSTALL.codex.pkg}`) + dim('   → then run `codex`'));
     } else {
-      out('  Install one yourself, e.g.: ' + cyan('npm install -g @anthropic-ai/claude-code') + dim('   then run `claude` once to log in.'));
+      const which = await pick('  Which agent do you want to set up?', [
+        { key: '1', label: 'Claude Code', hint: 'npm i -g @anthropic-ai/claude-code' },
+        { key: '2', label: 'Codex', hint: 'npm i -g @openai/codex' },
+        { key: '3', label: 'Neither right now', hint: 'just use a plain shell for now' },
+      ]);
+      const target = which.key === '1' ? INSTALL.claude : which.key === '2' ? INSTALL.codex : null;
+      if (target) {
+        const wantInstall = await confirm(`  Install ${target.label} now (npm i -g ${target.pkg})?`, false);
+        if (wantInstall) {
+          out(dim('  Installing via npm — this may take a minute…'));
+          const r = spawnSync('npm', ['install', '-g', target.pkg],
+            { stdio: 'inherit', shell: process.platform === 'win32' });
+          if (r.status === 0) out(green(`  ✓ Installed. Run \`${target.bin}\` once in a terminal to log in, then it shows up here.`));
+          else out(yellow('  Install didn\'t finish — do it manually: ') + cyan(`npm install -g ${target.pkg}`));
+        } else {
+          out('  Install it yourself: ' + cyan(`npm install -g ${target.pkg}`) + dim(`   then run \`${target.bin}\` once to log in.`));
+        }
+      } else {
+        out(dim('  Starting a plain shell — re-run `setup` any time to add an agent.'));
+      }
     }
     out(dim('  (Any CLI works — register it under "agents" in config.json.)'));
   }
