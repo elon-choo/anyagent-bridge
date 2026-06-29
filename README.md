@@ -27,6 +27,25 @@ Full install paths (npx · from source · Docker) and per-OS notes are in
 before exposing the bridge beyond localhost, and
 **[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md)** for a guided tour.
 
+## Let an AI agent set it up for you
+
+Don't want to touch a terminal? If you already have a **command-capable** AI agent
+(Claude Code or Codex) installed and logged in, hand it this repo and let it do the
+work. Paste this to it:
+
+> Install and run **anyagent-bridge** from
+> https://github.com/elon-choo/anyagent-bridge — follow the playbook in its
+> **AGENTS.md**. Do everything you can yourself; only ask me for things you truly
+> can't do (a browser login, an approval, a phone QR scan).
+
+It will clone, install, test, launch, and verify the bridge, pausing only for the
+handful of things an AI can't do for you. The exact steps it follows live in
+**[AGENTS.md](AGENTS.md)** (and `CLAUDE.md` points Claude Code at the same playbook),
+so handing the agent just this repo is enough.
+
+> Brand-new and have no agent installed yet? Run the wizard yourself instead:
+> `npx anyagent-bridge setup` — it checks prerequisites and helps you install one.
+
 ## Goals
 
 - **Open** — fully open source, no lock-in, bring whatever agent you like.

@@ -28,6 +28,8 @@
     "config.example.json",
     ".env.example",
     "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
     "LICENSE"
   ],
   "keywords": [
