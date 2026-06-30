@@ -146,6 +146,11 @@ let push;
 try { push = require('./push'); push.init(DATA_DIR); }
 catch (_) { push = { enabled: () => false, publicKey: () => null, count: () => 0, subscribe: () => false, send: async () => ({ sent: 0, failed: 0, devices: 0 }) }; }
 
+// Summarizes a session event into a typed one-line push via a fast model (Haiku).
+let notify;
+try { notify = require('./notify'); }
+catch (_) { notify = { summarize: async (ev) => ({ kind: (ev && ev.kind) || 'progress', summary: (ev && ev.text) ? String(ev.text).slice(0, 90) : '세션 업데이트' }), keyPresent: () => false }; }
+
 const CONFIG = {
   HOST: process.env.HOST || config.host || '127.0.0.1',
   PORT: parseInt(process.env.PORT, 10) || config.port || 3001,
@@ -894,6 +899,18 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
   if (!push.enabled()) return res.status(503).json({ error: 'push not available' });
   const r = await push.send({ kind: 'progress', agent: 'AnyAgent Bridge', body: '🔔 알림이 켜졌습니다 — 이제 이 기기로 세션 알림이 옵니다.', url: '/' });
   res.json({ success: true, ...r });
+});
+
+// A session event (from a Claude Code / Codex hook or the session itself) gets
+// summarized into a typed one-line notification and pushed to all devices.
+// body: { agent?, kind?, text, sessionId? }
+app.post('/api/notify/event', requireAuth, async (req, res) => {
+  if (!push.enabled()) return res.status(503).json({ error: 'push not available' });
+  const ev = (req.body && typeof req.body === 'object') ? req.body : {};
+  const { kind, summary } = await notify.summarize(ev);
+  const url = ev.sessionId ? ('/?session=' + encodeURIComponent(String(ev.sessionId))) : '/';
+  const r = await push.send({ kind, agent: ev.agent || 'agent', body: summary, url, sessionId: ev.sessionId || null });
+  res.json({ success: true, kind, summary, ...r });
 });
 
 // Persist projects back to config.json (runtime file).
