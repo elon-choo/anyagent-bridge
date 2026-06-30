@@ -141,6 +141,11 @@ function resolveShell() {
 const DATA_DIR = path.join(ROOT, '.data');
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { /* exists */ }
 
+// Optional web-push notifications (degrades to disabled if the lib/module is missing).
+let push;
+try { push = require('./push'); push.init(DATA_DIR); }
+catch (_) { push = { enabled: () => false, publicKey: () => null, count: () => 0, subscribe: () => false, send: async () => ({ sent: 0, failed: 0, devices: 0 }) }; }
+
 const CONFIG = {
   HOST: process.env.HOST || config.host || '127.0.0.1',
   PORT: parseInt(process.env.PORT, 10) || config.port || 3001,
@@ -871,6 +876,24 @@ app.get('/api/agents', (req, res) => {
     agents: CONFIG.AGENTS.map(a => ({ id: a.id, name: a.name, command: a.command })),
     count: CONFIG.AGENTS.length
   });
+});
+
+// ── Web-push notifications (optional). A device must authenticate (the access
+// token gate via requireAuth) before it can register to receive push. ──────────
+app.get('/api/push/vapid', requireAuth, (req, res) => {
+  if (!push.enabled()) return res.status(503).json({ error: 'push not available' });
+  res.json({ publicKey: push.publicKey() });
+});
+app.post('/api/push/subscribe', requireAuth, (req, res) => {
+  if (!push.enabled()) return res.status(503).json({ error: 'push not available' });
+  const sub = (req.body && (req.body.subscription || req.body)) || null;
+  if (!push.subscribe(sub)) return res.status(400).json({ error: 'invalid subscription' });
+  res.json({ success: true, devices: push.count() });
+});
+app.post('/api/push/test', requireAuth, async (req, res) => {
+  if (!push.enabled()) return res.status(503).json({ error: 'push not available' });
+  const r = await push.send({ kind: 'progress', agent: 'AnyAgent Bridge', body: '🔔 알림이 켜졌습니다 — 이제 이 기기로 세션 알림이 옵니다.', url: '/' });
+  res.json({ success: true, ...r });
 });
 
 // Persist projects back to config.json (runtime file).

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <meta name="theme-color" content="#0d1117" />
 <title>AnyAgent Bridge</title>
+<link rel="manifest" href="/manifest.webmanifest" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
 <style>
   :root {
@@ -257,6 +258,7 @@
     <button id="projBtn" title="Add or manage projects by browsing folders">📁 Projects</button>
     <button id="secBtn" title="Save API keys / tokens into a project's .env.local">🔑 Secrets</button>
     <button id="filesBtn" title="Browse and edit files — code & markdown">📂 Files</button>
+    <button id="notifBtn" title="Get a push when a session needs you (done · progress · question)">🔔 알림</button>
     <span class="spacer"></span>
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
   </div>
@@ -1245,6 +1247,38 @@
       if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) { e.preventDefault(); save(); }
       else if (e.key === "Escape" && document.activeElement !== fxTa) closeFiles(false);
     });
+  })();
+
+  // ---------- Push notifications (opt-in) ----------
+  (function setupPush() {
+    const notifBtn = $("notifBtn");
+    if (!notifBtn) return;
+    const supported = window.isSecureContext && ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+    if (!supported) { notifBtn.style.display = "none"; return; } // push needs a secure context (https / localhost)
+    let swReg = null;
+    navigator.serviceWorker.register("/sw.js").then((r) => { swReg = r; }).catch(() => {});
+
+    function pf(p, opts) { opts = opts || {}; opts.credentials = "include"; opts.headers = Object.assign(opts.headers || {}, token ? { Authorization: "Bearer " + token } : {}); return fetch(p, opts); }
+    function b64ToU8(b64) { const pad = "=".repeat((4 - (b64.length % 4)) % 4); const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/"); const raw = atob(s); const u = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) u[i] = raw.charCodeAt(i); return u; }
+
+    async function enable() {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") { alert("알림 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 알림을 허용해 주세요."); return; }
+        swReg = swReg || await navigator.serviceWorker.ready;
+        const vr = await pf("/api/push/vapid");
+        if (!vr.ok) { alert("이 서버에서는 푸시 알림을 쓸 수 없습니다."); return; }
+        const { publicKey } = await vr.json();
+        if (!publicKey) { alert("푸시 키를 받지 못했습니다."); return; }
+        const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(publicKey) });
+        const sr = await pf("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub }) });
+        if (!sr.ok) { alert("기기 등록에 실패했습니다."); return; }
+        await pf("/api/push/test", { method: "POST" }).catch(() => {}); // immediate confirmation buzz
+        notifBtn.textContent = "🔔 알림 켜짐";
+        notifBtn.title = "이 기기는 세션 알림을 받습니다";
+      } catch (e) { alert("알림 설정 실패: " + ((e && e.message) || e)); }
+    }
+    notifBtn.addEventListener("click", enable);
   })();
 
   // ---------- Bootstrap ----------
