@@ -7,7 +7,7 @@
 <title>AnyAgent Bridge</title>
 <link rel="manifest" href="/manifest.webmanifest" />
 <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" onerror="window.__aabCdnFailures=(window.__aabCdnFailures||[]).concat('xterm-css')" />
 <style>
   :root {
     --bg: #0d1117;
@@ -93,6 +93,14 @@
     background: var(--bg);
   }
   #terminal { width: 100%; height: 100%; }
+  #depAlert {
+    display: none; flex: 0 0 auto;
+    margin: 8px 10px 0; padding: 10px 12px;
+    border: 1px solid rgba(210,153,34,.55); border-radius: 8px;
+    background: rgba(210,153,34,.10); color: #ffdca8;
+    font-size: 12.5px; line-height: 1.45;
+  }
+  #depAlert.show { display: block; }
 
   /* Token gate overlay */
   #gate {
@@ -196,6 +204,7 @@
     margin: 0 auto 8px; width: max-content;
   }
   #onboard .qrbox img, #onboard .qrbox canvas { display: block; }
+  #onboard .qr-fail { color: #0d1117; font-size: 13px; line-height: 1.4; padding: 18px; text-align: center; }
   #onboard .qrcap { color: var(--muted); font-size: 12px; text-align: center; margin: 0 0 6px; }
   #onboard .blk { border-top: 1px solid var(--border); padding: 12px 0 4px; }
   #onboard .blk:first-of-type { border-top: none; }
@@ -319,10 +328,17 @@
   #fileExp .fx-dialog-card p { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
   #fileExp .fx-dialog-card input { width: 100%; margin-bottom: 8px; }
   #fileExp .fx-dialog-err { min-height: 16px; color: var(--red) !important; font-size: 12px !important; margin: 0 0 10px !important; }
+  #fileExp .fx-preview-note { margin: 0 0 12px; padding: 9px 11px; border: 1px solid rgba(210,153,34,.45); border-radius: 7px; color: #ffdca8; background: rgba(210,153,34,.10); font-size: 12px; }
   #fileExp .fx-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
   #fileExp .fx-dialog-actions .danger { background: #21262d; border-color: rgba(248,81,73,.55); color: #ffb4ae; }
   #fileExp .fx-dialog-actions .danger:hover { background: rgba(248,81,73,.12); border-color: var(--red); color: #ffc2bd; }
-  @media (max-width: 760px) { #fileExp .fx-tree { width: 42%; } #fileExp .fx-prev { display: none !important; } }
+  @media (max-width: 760px) {
+    #fileExp .fx-tree { width: 42%; }
+    #fileExp .fx-prev { display: none !important; }
+    #fileExp.fx-preview-mode .fx-tree { display: none; }
+    #fileExp.fx-preview-mode .fx-main { flex: 1 1 100%; }
+    #fileExp.fx-preview-mode .fx-prev { display: block !important; }
+  }
 
   /* ---------- Mobile input dock: key bar + compose box ---------- */
   #dock { flex: 0 0 auto; background: var(--bar); border-top: 1px solid var(--border); display: none; flex-direction: column; }
@@ -497,6 +513,7 @@
     <span class="spacer"></span>
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
   </div>
+  <div id="depAlert" role="alert" aria-live="polite"></div>
   <div id="termwrap"><div id="terminal"></div></div>
   <div id="dock" class="on">
     <div id="quickbar"></div>
@@ -666,8 +683,8 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js" onerror="window.__aabCdnFailures=(window.__aabCdnFailures||[]).concat('xterm-js')"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js" onerror="window.__aabCdnFailures=(window.__aabCdnFailures||[]).concat('xterm-fit')"></script>
 <script>
 (function () {
   "use strict";
@@ -787,9 +804,34 @@
     hideExposureBadge();
   }
 
+  function showDepAlert(msg) {
+    const el = $("depAlert");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = "show";
+  }
+
+  function noteCdnStyleFailure() {
+    const failures = window.__aabCdnFailures || [];
+    if (failures.indexOf("xterm-css") !== -1) {
+      showDepAlert("Terminal styles did not load. The terminal may look rough until the network can reach the CDN.");
+    }
+  }
+
+  function terminalDepsReady() {
+    return typeof window.Terminal === "function" &&
+      window.FitAddon && typeof window.FitAddon.FitAddon === "function";
+  }
+
   // ---------- Terminal ----------
   function initTerminal() {
-    if (term) return;
+    if (term) return true;
+    if (!terminalDepsReady()) {
+      setStatus("disconnected", "terminal unavailable");
+      showDepAlert("Terminal library did not load. Check network access to the CDN, then reload this page.");
+      return false;
+    }
+    noteCdnStyleFailure();
     term = new Terminal({
       cursorBlink: true,
       fontFamily: 'Menlo, Monaco, "Cascadia Code", "Courier New", monospace',
@@ -821,6 +863,7 @@
     window.addEventListener("resize", onResize, { passive: true });
     // Some mobile browsers need a delayed refit after the keyboard toggles
     window.addEventListener("orientationchange", () => setTimeout(onResize, 300));
+    return true;
   }
 
   function safeFit() {
@@ -1132,7 +1175,9 @@
   async function startSession() {
     try { await loadAgents(); await loadProjects(); }
     catch (e) { if (e.unauthorized) { showGate("Authentication failed."); return false; } }
-    hideGate(); initTerminal(); startExposureRefresh(); connect(); return true;
+    hideGate();
+    if (!initTerminal()) { startExposureRefresh(); return false; }
+    startExposureRefresh(); connect(); return true;
   }
 
   // Resume an existing cookie session (set by OAuth, or a prior token login).
@@ -1209,10 +1254,15 @@
     try {
       await loadQrLib();
       holder.innerHTML = "";
+      holder.className = "";
       new window.QRCode(holder, { text: url, width: 196, height: 196, correctLevel: window.QRCode.CorrectLevel.M });
       box.style.display = "flex";
     } catch (e) {
-      box.style.display = "none";
+      holder.innerHTML = "";
+      holder.className = "qr-fail";
+      holder.textContent = "QR unavailable. Use the address shown below.";
+      $("obQrCap").textContent = "QR library could not load.";
+      box.style.display = "flex";
     }
   }
   async function openOnboard() {
@@ -1672,6 +1722,7 @@
 
     function setMode(m) {
       fxMode = m; fxEmpty.style.display = "none";
+      fileExp.classList.toggle("fx-preview-mode", m === "preview");
       [].forEach.call(fxModes.children, (b) => b.classList.toggle("on", b.dataset.mode === m));
       if (m === "edit") { fxTa.style.display = ""; fxPrev.style.display = "none"; }
       else if (m === "preview") { fxTa.style.display = "none"; fxPrev.style.display = ""; renderPreview(); }
@@ -1693,7 +1744,18 @@
       })();
       return mdReady;
     }
-    function showRaw() { const pre = document.createElement("pre"); pre.textContent = fxTa.value; fxPrev.innerHTML = ""; fxPrev.appendChild(pre); }
+    function showRaw(note) {
+      const pre = document.createElement("pre");
+      pre.textContent = fxTa.value;
+      fxPrev.innerHTML = "";
+      if (note) {
+        const msg = document.createElement("div");
+        msg.className = "fx-preview-note";
+        msg.textContent = note;
+        fxPrev.appendChild(msg);
+      }
+      fxPrev.appendChild(pre);
+    }
     async function renderPreview() {
       await loadMd();
       // Render markdown, then ALWAYS sanitize before inserting. The bridge can be shared
@@ -1702,7 +1764,7 @@
       if (window.marked && window.DOMPurify) {
         try { fxPrev.innerHTML = window.DOMPurify.sanitize(window.marked.parse(fxTa.value)); return; } catch (_) {}
       }
-      showRaw();
+      showRaw("Markdown preview library did not load. Showing raw Markdown.");
     }
 
     fxTa.addEventListener("input", () => { fxDirty = true; fxFname.classList.add("dirty"); if (fxMode !== "edit") renderPreview(); });

@@ -27,17 +27,18 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Implemented | Round 8 added search/count, current/recent-first ordering, and activity hints; filter test narrowed 37 rows to 1. |
 | 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Backlog | After 320 screenshot shows Claude trust prompt filling terminal. |
 | 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Implemented | Round 9 probes the hidden file path with a 200 JSON endpoint before reading; missing/existing file tests produced console errors 0. |
-| 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Backlog | Code inspection of external script/style URLs. |
+| 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Implemented | Round 10 added visible fallbacks for terminal runtime, QR generation, and markdown preview libraries; blocked-CDN probes had page errors 0. |
 | 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Verified OK | Round 2 confirmed `icon-192.png`, `icon-512.png`, and `icon-maskable-512.png` are tracked and served with 200. |
 | 19 | Reconnect/offline state can remain visually `connected` briefly after network loss. | 3 | 3 | 9 | Implemented | Round 3 desktop/mobile forced-offline tests show immediate `offline`, still `offline` after delay, then `connected` after online restore. |
 | 20 | File creation, rename, and delete still rely on `prompt` / `confirm`, which is rough on mobile. | 3 | 3 | 9 | Implemented | Round 7 replaces file create/folder/rename/delete dialogs with an in-app action sheet and makes row actions visible 44px+ targets on mobile. |
 | 21 | Notification settings are one-button only; there is no quiet/noise control. | 3 | 3 | 9 | Backlog | Code inspection of push setup. |
 | 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Implemented | Round 2 added a persistent top-bar exposure badge: Local, Network, or Tunnel. |
-| 23 | Markdown preview depends on runtime CDN loading. | 3 | 3 | 9 | Backlog | Code inspection of `loadMd()`. |
+| 23 | Markdown preview depends on runtime CDN loading. | 3 | 3 | 9 | Implemented | Round 10 falls back to raw Markdown with an inline warning when marked/DOMPurify cannot load. |
 | 24 | Reduced-motion and animation preferences are not explicitly handled. | 2 | 4 | 8 | Backlog | CSS inspection. |
 | 25 | There were no one-tap common command snippets for phone use. | 4 | 5 | 20 | Implemented | Round 4 quick command chips send via existing `sendToAgent`; all chips are 44px+ on mobile. |
 | 26 | Compose had no local command history recall after sending. | 3 | 5 | 15 | Implemented | Round 4 adds in-memory per-session recall with ArrowUp/ArrowDown; nothing is persisted to storage. |
 | 27 | Session rename/close used native `prompt`/`confirm` dialogs and tiny 18-20px row actions on mobile. | 4 | 5 | 20 | Implemented | Round 5 replaced them with inline rename and two-step close controls; row action buttons are 44px+ on mobile. |
+| 28 | Markdown Preview mode was hidden on mobile by the small-screen file explorer CSS. | 3 | 5 | 15 | Implemented | Round 10 adds a mobile preview mode that hides the tree and shows the preview pane full-width. |
 
 Round 1 verification:
 
@@ -153,3 +154,19 @@ Round 9 evidence:
 - Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
 - Test cleanup removed temp sessions 115 and 116 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round9/full/`.
+
+Round 10 evidence:
+
+- Before focused CDN probe: blocking jsDelivr made the app hide the login gate, leave the terminal blank, show `disconnected`, and raise `Terminal is not defined`; there was no visible fallback.
+- Added a dependency alert for missing terminal runtime/style assets and guarded session startup so a missing xterm bundle does not open a WebSocket or create a session.
+- Added QR fallback text in the Connect-device modal when `qrcodejs` cannot load.
+- Added markdown preview fallback text and raw Markdown rendering when `marked` or `DOMPurify` cannot load.
+- Found and fixed an additional mobile issue: Preview mode was hidden below 760px; mobile Preview now hides the tree and shows the preview pane.
+- Focused terminal CDN-blocked probe: page errors 0, visible dependency alert, status `terminal unavailable`, WebSocket opens 0, and session count stayed 37.
+- Focused QR-blocked probe: page errors 0, visible `QR unavailable` fallback in the modal, and session count stayed 37.
+- Focused Markdown-blocked probe: page errors 0, visible fallback note, raw Markdown rendered, preview pane visible on mobile, and session count stayed 37.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, dependency alert hidden on normal load, project-scoped agent start, manual `sendToAgent`, image attach, Tab special key, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, and normal Markdown preview rendering all passed.
+- Normal Markdown preview rendered `Round 10` and `preview fallback`; on mobile the file tree was hidden and the preview pane was visible.
+- Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
+- Test cleanup removed temp sessions 119 and 120 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round10/full/`.
