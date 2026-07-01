@@ -22,7 +22,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 9 | Image attachment path inserted into compose was not draft-persisted. | 3 | 5 | 15 | Implemented | Image path insert still passes and calls draft save. |
 | 10 | Switching sessions could carry unsent text into the wrong session. | 4 | 4 | 16 | Implemented | Draft is saved before switch/new session and restored per session id. |
 | 11 | The UI reports `connected` before the server `ready` frame. | 3 | 4 | 12 | Implemented | Round 3 changed socket-open status to `attaching...`; `connected` is set only after server `ready`. |
-| 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Backlog | Home screenshots show a blank terminal after login. |
+| 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Partially implemented | Round 4 added safe one-tap command chips (`pwd`, `ls`, `git status`, `whoami`) above the mobile input dock. |
 | 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Backlog | After mobile screenshot shows `Connect` partially off-screen. |
 | 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Backlog | Before test observed 38 session rows. |
 | 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Backlog | After 320 screenshot shows Claude trust prompt filling terminal. |
@@ -35,6 +35,8 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Implemented | Round 2 added a persistent top-bar exposure badge: Local, Network, or Tunnel. |
 | 23 | Markdown preview depends on runtime CDN loading. | 3 | 3 | 9 | Backlog | Code inspection of `loadMd()`. |
 | 24 | Reduced-motion and animation preferences are not explicitly handled. | 2 | 4 | 8 | Backlog | CSS inspection. |
+| 25 | There were no one-tap common command snippets for phone use. | 4 | 5 | 20 | Implemented | Round 4 quick command chips send via existing `sendToAgent`; all chips are 44px+ on mobile. |
+| 26 | Compose had no local command history recall after sending. | 3 | 5 | 15 | Implemented | Round 4 adds in-memory per-session recall with ArrowUp/ArrowDown; nothing is persisted to storage. |
 
 Round 1 verification:
 
@@ -74,3 +76,17 @@ Round 3 evidence:
 - Mobile/320/390 touch-target audit: 0 audited controls under 44px.
 - Test cleanup returned the bridge to 37 sessions and 0 projects.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round3/full/`.
+
+Round 4 evidence:
+
+- Before focused input probe: no `#quickbar`, 0 quick command buttons, and ArrowUp recall left compose empty after sending.
+- Added safe one-tap commands: `pwd`, `ls`, `git status`, `whoami`.
+- Focused input probe: tapping `pwd` emitted `sendToAgent: "pwd"`; sending `echo HISTORY_ONE` then ArrowUp/ArrowDown recalled history in order and returned to blank.
+- Sent command history is in-memory only and per session; it is not written to localStorage.
+- Full desktop/mobile flow: quick commands and manual sends emitted expected `sendToAgent` frames on both desktop and mobile.
+- Flow coverage remained: project-scoped agent start, image attach, special key frame, session switch, forced reconnect.
+- Full flow page errors: desktop 0, mobile 0.
+- Quick command touch targets: `pwd`, `ls`, `git status`, and `whoami` were all 44px+ on mobile.
+- Mobile/320/390 touch-target audit: 0 audited controls under 44px.
+- Test cleanup returned the bridge to 37 sessions and 0 projects.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round4/full/`.

@@ -292,18 +292,24 @@
   /* ---------- Mobile input dock: key bar + compose box ---------- */
   #dock { flex: 0 0 auto; background: var(--bar); border-top: 1px solid var(--border); display: none; flex-direction: column; }
   #dock.on { display: flex; }
-  #keybar {
+  #quickbar, #keybar {
     display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
     border-bottom: 1px solid var(--border); scrollbar-width: thin;
   }
+  #quickbar { background: rgba(13,17,23,.38); }
+  #quickbar::-webkit-scrollbar,
   #keybar::-webkit-scrollbar { height: 5px; }
+  #quickbar::-webkit-scrollbar-thumb,
   #keybar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  #quickbar .qc,
   #keybar .kb {
     flex: 0 0 auto; min-width: 40px; padding: 7px 10px; font-size: 13px; line-height: 1;
     background: #0d1117; border: 1px solid var(--border); border-radius: 7px; color: var(--fg);
     cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
   }
+  #quickbar .qc:hover,
   #keybar .kb:hover { background: #21262d; }
+  #quickbar .qc:active,
   #keybar .kb:active { background: var(--accent); border-color: var(--accent); color: #fff; }
   #keybar .kb.sticky.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   #keybar .kb.wide { min-width: auto; }
@@ -371,7 +377,9 @@
   #sessModal .sx-new { width: 100%; }
   @media (max-width: 640px) {
     #dock { padding-bottom: env(safe-area-inset-bottom); }
+    #quickbar,
     #keybar { padding: 8px; }
+    #quickbar .qc,
     #keybar .kb {
       min-width: 44px;
       min-height: 44px;
@@ -415,6 +423,7 @@
   </div>
   <div id="termwrap"><div id="terminal"></div></div>
   <div id="dock" class="on">
+    <div id="quickbar"></div>
     <div id="keybar"></div>
     <div id="composebar">
       <button class="attach" id="composeAttach" title="Attach an image (or paste / drag one in)">📎</button>
@@ -1633,10 +1642,12 @@
 
   // ---------- Mobile input dock: key bar · compose box · image · sessions ----------
   (function setupDock() {
-    const dock = $("dock"), keybar = $("keybar"), dockToggle = $("dockToggle");
+    const dock = $("dock"), quickbar = $("quickbar"), keybar = $("keybar"), dockToggle = $("dockToggle");
     const ci = $("composeInput"), sendBtn = $("composeSend"), attachBtn = $("composeAttach"), imgFile = $("imgFile");
     const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList");
     let draftSessionKey = null;
+    let historyIndex = -1;
+    const commandHistory = Object.create(null);
 
     // ---- toast ----
     let toastT = null;
@@ -1644,6 +1655,59 @@
       const t = $("toast"); t.textContent = msg; t.className = isErr ? "err show" : "show";
       clearTimeout(toastT); toastT = setTimeout(() => { t.className = isErr ? "err" : ""; }, 2200);
     }
+
+    // ---- quick commands: safe, non-destructive one-tap commands for a fresh shell ----
+    const QUICK_COMMANDS = ["pwd", "ls", "git status", "whoami"];
+    function historyKey() { return String(currentSessionId || "pending"); }
+    function historyList() {
+      const key = historyKey();
+      if (!commandHistory[key]) commandHistory[key] = [];
+      return commandHistory[key];
+    }
+    function rememberCommand(text) {
+      const v = String(text || "").trim();
+      if (!v) return;
+      const list = historyList();
+      if (list[list.length - 1] !== v) list.push(v);
+      while (list.length > 30) list.shift();
+      historyIndex = list.length;
+    }
+    function recallHistory(delta) {
+      const list = historyList();
+      if (!list.length) return false;
+      historyIndex = Math.max(0, Math.min(list.length, historyIndex + delta));
+      ci.value = historyIndex >= list.length ? "" : list[historyIndex];
+      autogrow();
+      saveComposeDraft();
+      return true;
+    }
+    function sendText(text) {
+      if (!String(text || "").trim()) return false;
+      if (!send({ type: "sendToAgent", text })) { toast("Not connected", true); return false; }
+      rememberCommand(text);
+      return true;
+    }
+    function buildQuickbar() {
+      quickbar.innerHTML = "";
+      for (const cmd of QUICK_COMMANDS) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "qc";
+        b.textContent = cmd;
+        b.title = "Send command: " + cmd;
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (sendText(cmd)) {
+            ci.value = "";
+            storageRemove(composeDraftKey(currentSessionId));
+            draftSessionKey = String(currentSessionId || "pending");
+            autogrow();
+          }
+        });
+        quickbar.appendChild(b);
+      }
+    }
+    buildQuickbar();
 
     // ---- key bar: each button injects a raw sequence into the PTY ----
     // Arrows/Esc/Tab/Ctrl-combos don't exist on a phone's soft keyboard, so expose them here.
@@ -1708,7 +1772,7 @@
       const text = ci.value;
       if (!text.trim()) return;
       // sendToAgent writes the text + CR to the PTY (submits) — same as typing then Enter.
-      if (!send({ type: "sendToAgent", text })) { toast("Not connected", true); return; }
+      if (!sendText(text)) return;
       storageRemove(composeDraftKey(currentSessionId));
       ci.value = ""; autogrow();
       draftSessionKey = String(currentSessionId || "pending");
@@ -1716,6 +1780,11 @@
     sendBtn.addEventListener("click", sendCompose);
     ci.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !composing && !e.isComposing) { e.preventDefault(); sendCompose(); }
+      else if (e.key === "ArrowUp" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !composing && !e.isComposing) {
+        if (recallHistory(-1)) e.preventDefault();
+      } else if (e.key === "ArrowDown" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !composing && !e.isComposing) {
+        if (recallHistory(1)) e.preventDefault();
+      }
     });
 
     // ---- image / screenshot: attach button, clipboard paste, drag & drop ----
