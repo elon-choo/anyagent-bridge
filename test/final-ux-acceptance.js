@@ -290,6 +290,64 @@ async function stateSnapshot(page) {
   });
 }
 
+async function keyboardSnapshot(page) {
+  return page.evaluate(() => {
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const rectOf = (selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        w: Math.round(rect.width),
+        h: Math.round(rect.height),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom)
+      };
+    };
+    const controlMetrics = (selector) => Array.from(document.querySelectorAll(selector))
+      .filter(visible)
+      .map(el => {
+        const rect = el.getBoundingClientRect();
+        return {
+          id: el.id || (el.textContent || '').trim(),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom)
+        };
+      });
+    const input = rectOf('#composeInput');
+    const send = rectOf('#composeSend');
+    const controls = controlMetrics('#composebar .attach, #composeSend, #composeInput, #keybar .kb, #quickbar .qc');
+    return {
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      visualViewport: {
+        width: Math.round(window.visualViewport ? window.visualViewport.width : window.innerWidth),
+        height: Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight)
+      },
+      activeId: document.activeElement ? document.activeElement.id || document.activeElement.tagName : null,
+      overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      bodyHasKeyboardProbe: document.body ? document.body.innerText.includes('KEYBOARD_PROBE') : false,
+      composeValue: document.querySelector('#composeInput')?.value || '',
+      termwrapRect: rectOf('#termwrap'),
+      composebarRect: rectOf('#composebar'),
+      inputRect: input,
+      sendRect: send,
+      inputVisible: visible(document.querySelector('#composeInput')),
+      sendVisible: visible(document.querySelector('#composeSend')),
+      inputWithinViewport: !!(input && input.top >= 0 && input.bottom <= window.innerHeight),
+      sendWithinViewport: !!(send && send.top >= 0 && send.bottom <= window.innerHeight),
+      controls,
+      controlsTouchSafe44: controls.every(control => control.w >= 44 && control.h >= 44)
+    };
+  });
+}
+
 async function modalInfo(page, selector) {
   return page.evaluate((sel) => {
     const modal = document.querySelector(sel);
@@ -528,6 +586,32 @@ async function localMobileLandscapeFlow(browser, state) {
 
   await context.close();
   return { initialSession: tracker.sessionIds[0] || null, tracker, initial, afterFirstCommand };
+}
+
+async function localMobileKeyboardFlow(browser, state) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-mobile-keyboard-390');
+  await openApp(page, BASE_URL);
+
+  await page.fill('#composeInput', 'echo KEYBOARD_PROBE');
+  await page.focus('#composeInput');
+  const beforeShrink = await keyboardSnapshot(page);
+  await page.setViewportSize({ width: 390, height: 560 });
+  await page.waitForTimeout(250);
+  const afterShrink = await keyboardSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-mobile-keyboard-390-shrink.png'), fullPage: true });
+
+  await page.click('#composeSend');
+  await waitFor(page, () => document.body.innerText.includes('KEYBOARD_PROBE'), null, 'keyboard shrink command output', 15000);
+  const afterSend = await keyboardSnapshot(page);
+
+  await context.close();
+  return { initialSession: tracker.sessionIds[0] || null, tracker, beforeShrink, afterShrink, afterSend };
 }
 
 async function setupFileFixture(state) {
@@ -797,6 +881,7 @@ function buildChecks(report) {
   const desktop = report.flows.localDesktop;
   const mobile = report.flows.localMobile320;
   const landscape = report.flows.localMobileLandscape844;
+  const keyboard = report.flows.localMobileKeyboard390;
   const files = report.flows.mobileFiles390;
   const funnel = report.flows.funnelMobile390;
   const landing = report.landingProduction;
@@ -856,6 +941,18 @@ function buildChecks(report) {
       noOverflow: !landscape.initial.overflowX && !landscape.afterFirstCommand.overflowX,
       toolbarTouch: landscape.initial.toolbarTouchSafe44,
       terminalUsable: landscape.initial.termwrapRect && landscape.initial.termwrapRect.h >= 96
+    },
+    localMobileKeyboard390: {
+      newSession: !!keyboard.initialSession,
+      focusedBeforeShrink: keyboard.beforeShrink.activeId === 'composeInput',
+      viewportShrank: keyboard.beforeShrink.viewport.height > keyboard.afterShrink.viewport.height,
+      composeVisible: keyboard.afterShrink.inputVisible && keyboard.afterShrink.inputWithinViewport,
+      sendVisible: keyboard.afterShrink.sendVisible && keyboard.afterShrink.sendWithinViewport,
+      controlsTouch: keyboard.afterShrink.controlsTouchSafe44,
+      noOverflow: !keyboard.beforeShrink.overflowX && !keyboard.afterShrink.overflowX && !keyboard.afterSend.overflowX,
+      terminalUsable: keyboard.afterShrink.termwrapRect && keyboard.afterShrink.termwrapRect.h >= 160,
+      sendToAgent: hasSent(keyboard.tracker, 'sendToAgent', item => item.text === 'echo KEYBOARD_PROBE'),
+      outputSeen: keyboard.afterSend.bodyHasKeyboardProbe || hasReceived(keyboard.tracker, 'output', item => /KEYBOARD_PROBE/.test(item.sample || ''))
     },
     mobileFiles390: {
       newSession: !!files.initialSession,
@@ -938,6 +1035,7 @@ async function main() {
     report.flows.localDesktop = await localDesktopFlow(browser, state);
     report.flows.localMobile320 = await localMobileFlow(browser, state);
     report.flows.localMobileLandscape844 = await localMobileLandscapeFlow(browser, state);
+    report.flows.localMobileKeyboard390 = await localMobileKeyboardFlow(browser, state);
     report.flows.mobileFiles390 = await mobileFilesFlow(browser, state);
     report.flows.funnelMobile390 = await funnelMobileFlow(browser, state);
     report.landingProduction = await landingAudit(browser, state);
@@ -960,7 +1058,7 @@ async function main() {
     report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMobileLandscape844 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),

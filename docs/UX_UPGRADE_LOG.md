@@ -53,6 +53,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 40 | The tracked final acceptance still did not prove unsent compose/image drafts stay isolated while switching sessions. | 5 | 5 | 25 | Implemented | Round 26 extends the desktop Sessions flow to verify the first session's uploaded image draft restores, a new session starts clean, and the second session's unsent draft restores only in that second session. |
 | 41 | The tracked final acceptance still accepted mobile toolbar controls below the stated 44px phone target. | 4 | 5 | 20 | Implemented | Round 27 tightens `test/final-ux-acceptance.js` so local 320px and funnel 390px toolbar controls must all measure 44x44 or larger. |
 | 42 | Phone landscape width bypassed the mobile touch-target rules, making toolbar and dock controls as short as 15-35px at 844x390. | 4 | 5 | 20 | Implemented | Round 28 applies mobile touch rules to short landscape viewports and adds a tracked 844x390 landscape flow to final acceptance. |
+| 43 | The tracked final acceptance did not prove the compose/send path remains reachable when a phone soft keyboard shrinks the viewport. | 5 | 5 | 25 | Implemented | Round 29 adds a 390px mobile keyboard-shrink flow that focuses compose, shrinks the viewport to 560px high, verifies input/send visibility and 44px controls, sends a command, and cleans the session. |
 
 Round 1 verification:
 
@@ -346,3 +347,11 @@ Round 28 evidence:
 - Added `localMobileLandscape844` to `test/final-ux-acceptance.js`.
 - Latest `npm run test:ux-final` passed with `localMobileLandscape844.toolbarTouch: true`, `oneTapFirstCommand: true`, `noOverflow: true`, and `terminalUsable: true`; the landscape terminal measured 844x96 and every visible toolbar control measured 44px+.
 - Temporary sessions 247, 248, 249, 250, 251, and 252 were deleted; session count returned from 37 to 37.
+
+Round 29 evidence:
+
+- Added `localMobileKeyboard390` to `test/final-ux-acceptance.js`.
+- The runner now focuses the compose box at 390x844, shrinks the mobile viewport to 390x560 to model soft-keyboard pressure, verifies compose and Send remain inside the viewport, verifies visible dock controls remain 44px+, sends `echo KEYBOARD_PROBE`, and verifies output.
+- Latest `npm run test:ux-final` passed with `localMobileKeyboard390.focusedBeforeShrink`, `viewportShrank`, `composeVisible`, `sendVisible`, `controlsTouch`, `noOverflow`, `terminalUsable`, `sendToAgent`, and `outputSeen` all true.
+- In the shrink state, the terminal measured 390x216, compose input measured 250x44, Send measured 66x44, and all visible dock controls measured 44px+.
+- Temporary sessions 254, 255, 256, 257, 258, 259, and 260 were deleted; session count returned from 37 to 37.
