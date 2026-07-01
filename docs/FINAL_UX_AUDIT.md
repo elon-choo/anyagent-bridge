@@ -2,7 +2,7 @@
 
 Date: 2026-07-01
 
-This audit summarizes the current AnyAgent Bridge UX upgrade state after 30 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
+This audit summarizes the current AnyAgent Bridge UX upgrade state after 31 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
 
 ## Current Status
 
@@ -31,15 +31,16 @@ Latest automated evidence:
 | Prefer client-only, avoid server churn | UX rounds changed `client/`, `public/`, `.gitignore`, and docs; final `git diff --stat -- server/` is empty. | Verified |
 | Secret safety | Patch-level secret scans are clean; `.data/`, `.env`, `.env.local`, `.vercel/`, `.npmrc`, and generated local state remain ignored. | Verified |
 | No package release performed | No package release command was run. | Verified |
-| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 44 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, physical-phone evidence capture, audit reproducibility, phone-smoke readiness, mobile file-preview verification, session-switch acceptance, session draft isolation, stricter toolbar touch-target evidence, phone landscape touch ergonomics, soft-keyboard compose reachability, and mobile notification mode persistence. | Verified |
-| Implement prioritized improvements in small rounds | Rounds 1-30 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
+| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 45 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, physical-phone evidence capture, audit reproducibility, phone-smoke readiness, mobile file-preview verification, session-switch acceptance, session draft isolation, stricter toolbar touch-target evidence, phone landscape touch ergonomics, soft-keyboard compose reachability, mobile notification mode persistence, and simultaneous multi-viewer shared-session acceptance. | Verified |
+| Implement prioritized improvements in small rounds | Rounds 1-31 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
 | Beginners can send the first mobile command within 3 taps | Final local 320px and funnel 390px checks show fresh starter visible, `pwd` sends with one tap, output appears, and starter closes. | Verified |
-| 320-1440px layouts do not break | Final acceptance covers local app at 1440, 844x390 landscape, 390x560 keyboard-shrink, and 320 portrait, funnel at 390, landing at 1440/390/320; horizontal overflow 0. | Verified |
+| 320-1440px layouts do not break | Final acceptance covers local app at 1440, dual 1280x760 multi-viewer, 844x390 landscape, 390x560 keyboard-shrink, and 320 portrait, funnel at 390, landing at 1440/390/320; horizontal overflow 0. | Verified |
 | Touch targets are sufficient | Final acceptance now requires mobile starter, launch-assist, Files editbar, local 320px toolbar, local 844x390 landscape toolbar, and funnel 390px toolbar controls to measure 44px+. | Verified |
 | Agent launch prompt remains usable on 320px | Final local 320px run observes `startAgent`, compact launch assist, Esc and Ctrl-C input frames, and 44px+ assist buttons. | Verified |
 | Reconnect preserves usable state | Final desktop run switches sessions, restores per-session compose drafts, returns to the original output, then forces offline/online and returns from `offline` to `connected`. | Verified |
+| Simultaneous viewers share a session | Final local multi-viewer run deep-links a second browser context to session 280, verifies it attaches to the same session, sends `echo FINAL_MULTIVIEW` from the secondary view, and both viewers see output with no overflow. | Verified |
 | WebSocket frames match intended actions | Final run observes `sendToAgent`, `input`, and `startAgent` frames for desktop/mobile/funnel flows. | Verified |
-| Existing features still work | Final run covers compose send, keyboard-shrink send, image attach, special key, Sessions new-session/switch-back/draft isolation, Connect, Projects, Secrets, Files, mobile Markdown preview, Notifications Quiet/Important mode persistence, reconnect, public funnel, and landing. PWA endpoints are also checked. | Verified by automation; real install pending phone smoke |
+| Existing features still work | Final run covers compose send, keyboard-shrink send, simultaneous shared-session viewing/control, image attach, special key, Sessions new-session/switch-back/draft isolation, Connect, Projects, Secrets, Files, mobile Markdown preview, Notifications Quiet/Important mode persistence, reconnect, public funnel, and landing. PWA endpoints are also checked. | Verified by automation; real install pending phone smoke |
 | Native browser dialogs removed from UX-critical paths | Final scan for native `alert`, `confirm`, and `prompt` calls is empty in `client/index.html`, `client/sw.js`, and `public/index.html`. | Verified |
 | Accessibility: modals named, focus contained/restored | Final modal report verifies Connect, Projects, Secrets, Files, Notifications, and Sessions have dialog semantics, focus moves inside, and focus restores to opener. | Verified |
 | Notification noise controls exist | Round 16 verifies service-worker filtering; final acceptance now verifies mobile Quiet and Important selection persist after reopening, with 44px+ mode controls. | Verified |
@@ -49,7 +50,7 @@ Latest automated evidence:
 
 ## Finding Status Summary
 
-All 44 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
+All 45 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
 
 | Range | Area | Status |
 |---|---|---|
@@ -60,7 +61,7 @@ All 44 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Ver
 | 16-19 | Missing env noise, CDN fallbacks, PWA icon availability, offline state | Implemented / Verified OK |
 | 20-23 | File dialogs, notification modes, exposure badge, Markdown fallback | Implemented |
 | 24-28 | Reduced motion, quick commands, command history, session row actions, mobile preview | Implemented |
-| 29-44 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template, reproducible final acceptance, phone-smoke preflight, mobile file preview acceptance, session-switch acceptance, session draft isolation, stricter toolbar touch-target acceptance, phone landscape touch ergonomics, soft-keyboard compose reachability, mobile notification mode persistence | Implemented |
+| 29-45 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template, reproducible final acceptance, phone-smoke preflight, mobile file preview acceptance, session-switch acceptance, session draft isolation, stricter toolbar touch-target acceptance, phone landscape touch ergonomics, soft-keyboard compose reachability, mobile notification mode persistence, simultaneous multi-viewer shared-session acceptance | Implemented |
 
 ## Final Automated Acceptance
 
@@ -73,6 +74,7 @@ Before the required physical-phone smoke, run `npm run test:phone-preflight`. It
 Automated app scope:
 
 - Local desktop 1440x900: fresh starter, manual `sendToAgent`, terminal output, image attach, Esc key frame, Sessions new-session/switch-back, per-session compose draft isolation, all major modals, offline/online reconnect.
+- Local multi-viewer desktop 1280x760: secondary browser opens `?session=<id>`, reconnects to the same session, URL cleans, starter is not shown, secondary sends `echo FINAL_MULTIVIEW`, and both viewers see output with no horizontal overflow.
 - Local mobile 320x720: fresh starter, one-tap `pwd`, real `startAgent`, compact launch assist, Esc and Ctrl-C frames, 44px+ toolbar controls, no horizontal overflow.
 - Local mobile landscape 844x390: fresh starter, one-tap `pwd`, 44px+ toolbar controls, no horizontal overflow, usable terminal area.
 - Local mobile keyboard shrink 390x560: focused compose remains visible, Send remains visible, dock controls remain 44px+, `sendToAgent` fires, and output appears.
@@ -84,7 +86,8 @@ Automated app scope:
 
 Cleanup evidence:
 
-- Latest reproducible final acceptance created sessions 269, 270, 271, 272, 273, 274, 275, and 276 and deleted them; session count returned from 37 to 37.
+- Latest reproducible final acceptance created sessions 277, 278, 279, 280, 281, 282, 283, 284, and 285 and deleted them; session count returned from 37 to 37.
+- The latest run passed `localMultiViewer.sameSession`, `secondaryReconnect`, `secondaryUrlCleaned`, `secondaryNoStarter`, `secondarySendToAgent`, `primarySawOutput`, `secondarySawOutput`, and `noOverflow`; both viewers attached to session 280 and rendered `FINAL_MULTIVIEW`.
 - The latest run passed `localMobileNotifications390.quietSelected`, `quietPersists`, `importantSelected`, `importantPersists`, `singleActiveMode`, `touchSafe`, and `noOverflow`; mode buttons measured 308x51.
 - The latest run passed `localMobileKeyboard390.focusedBeforeShrink`, `viewportShrank`, `composeVisible`, `sendVisible`, `controlsTouch`, `noOverflow`, `terminalUsable`, `sendToAgent`, and `outputSeen`; after shrinking to 390x560, terminal measured 390x216, compose input 250x44, and Send 66x44.
 - The latest run passed `localMobileLandscape844.toolbarTouch: true`, `oneTapFirstCommand: true`, `noOverflow: true`, and `terminalUsable: true`; every visible landscape toolbar control measured at least 44x44 and the terminal area measured 844x96.

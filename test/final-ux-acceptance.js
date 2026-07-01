@@ -219,11 +219,13 @@ async function waitForStatus(page, text, timeout = 15000) {
   }, text, `status ${text}`, timeout);
 }
 
-async function openApp(page, base) {
-  await page.goto(appUrl(base), { waitUntil: 'domcontentloaded', timeout: 30000 });
+async function openApp(page, base, options = {}) {
+  await page.goto(appUrl(base, options.params), { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('#terminal .xterm', { timeout: 20000 });
   await waitForStatus(page, 'connected', 20000);
-  await page.waitForSelector('#starterPanel.open', { timeout: 15000 });
+  if (options.waitForStarter !== false) {
+    await page.waitForSelector('#starterPanel.open', { timeout: 15000 });
+  }
 }
 
 async function stateSnapshot(page) {
@@ -274,6 +276,7 @@ async function stateSnapshot(page) {
       overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
       bodyHasHome: body.includes('/Users/'),
       bodyHasFinalDesktop: body.includes('FINAL_DESKTOP'),
+      bodyHasFinalMultiview: body.includes('FINAL_MULTIVIEW'),
       composeValue: document.querySelector('#composeInput')?.value || '',
       rows,
       starterRect: rectOf(document.querySelector('#starterPanel')),
@@ -600,6 +603,49 @@ async function localMobileFlow(browser, state) {
 
   await context.close();
   return { initialSession: tracker.sessionIds[0] || null, tracker, initial, afterFirstCommand, launchAssist };
+}
+
+async function localMultiViewerFlow(browser, state) {
+  const contextA = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+  const pageA = await contextA.newPage();
+  const trackerA = attachPageWatchers(pageA, state, 'local-multiviewer-primary');
+  await openApp(pageA, BASE_URL);
+  const firstSession = await waitForTracker(trackerA, item => item.sessionIds[0], 'primary multiviewer session');
+  const primaryInitial = await stateSnapshot(pageA);
+
+  const contextB = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+  const pageB = await contextB.newPage();
+  const trackerB = attachPageWatchers(pageB, state, 'local-multiviewer-secondary');
+  await openApp(pageB, BASE_URL, { params: { session: firstSession }, waitForStarter: false });
+  const secondReady = await waitForTracker(trackerB, item => item.received.find(frame =>
+    frame.type === 'ready' && frame.sessionId
+  ), 'secondary multiviewer ready');
+  const secondaryInitial = await stateSnapshot(pageB);
+  const secondaryUrlCleaned = await pageB.evaluate(() => !new URLSearchParams(location.search).has('session'));
+
+  await pageB.fill('#composeInput', 'echo FINAL_MULTIVIEW');
+  await pageB.click('#composeSend');
+  await waitFor(pageA, () => document.body.innerText.includes('FINAL_MULTIVIEW'), null, 'primary multiviewer output', 15000);
+  await waitFor(pageB, () => document.body.innerText.includes('FINAL_MULTIVIEW'), null, 'secondary multiviewer output', 15000);
+  const primaryAfter = await stateSnapshot(pageA);
+  const secondaryAfter = await stateSnapshot(pageB);
+  await pageA.screenshot({ path: path.join(OUT_DIR, 'local-multiviewer-primary.png'), fullPage: true });
+  await pageB.screenshot({ path: path.join(OUT_DIR, 'local-multiviewer-secondary.png'), fullPage: true });
+
+  await contextB.close();
+  await contextA.close();
+  return {
+    firstSession,
+    secondSession: secondReady.sessionId || null,
+    secondaryReconnect: secondReady.isReconnect === true,
+    secondaryUrlCleaned,
+    trackerA,
+    trackerB,
+    primaryInitial,
+    secondaryInitial,
+    primaryAfter,
+    secondaryAfter
+  };
 }
 
 async function localMobileLandscapeFlow(browser, state) {
@@ -960,6 +1006,7 @@ async function cleanupArtifacts(state) {
 function buildChecks(report) {
   const desktop = report.flows.localDesktop;
   const mobile = report.flows.localMobile320;
+  const multi = report.flows.localMultiViewer;
   const landscape = report.flows.localMobileLandscape844;
   const keyboard = report.flows.localMobileKeyboard390;
   const notifications = report.flows.localMobileNotifications390;
@@ -1013,6 +1060,19 @@ function buildChecks(report) {
       startAndKeys: hasSent(mobile.tracker, 'startAgent') &&
         hasSent(mobile.tracker, 'input', item => item.data === '\x1b') &&
         hasSent(mobile.tracker, 'input', item => item.data === '\x03')
+    },
+    localMultiViewer: {
+      sameSession: !!multi.firstSession && String(multi.firstSession) === String(multi.secondSession),
+      secondaryReconnect: multi.secondaryReconnect,
+      secondaryUrlCleaned: multi.secondaryUrlCleaned,
+      secondaryNoStarter: !multi.secondaryInitial.starterOpen,
+      secondarySendToAgent: hasSent(multi.trackerB, 'sendToAgent', item => item.text === 'echo FINAL_MULTIVIEW'),
+      primarySawOutput: multi.primaryAfter.bodyHasFinalMultiview ||
+        hasReceived(multi.trackerA, 'output', item => /FINAL_MULTIVIEW/.test(item.sample || '')),
+      secondarySawOutput: multi.secondaryAfter.bodyHasFinalMultiview ||
+        hasReceived(multi.trackerB, 'output', item => /FINAL_MULTIVIEW/.test(item.sample || '')),
+      noOverflow: !multi.primaryInitial.overflowX && !multi.secondaryInitial.overflowX &&
+        !multi.primaryAfter.overflowX && !multi.secondaryAfter.overflowX
     },
     localMobileLandscape844: {
       newSession: !!landscape.initialSession,
@@ -1127,6 +1187,7 @@ async function main() {
     browser = await chromium.launch();
     report.flows.localDesktop = await localDesktopFlow(browser, state);
     report.flows.localMobile320 = await localMobileFlow(browser, state);
+    report.flows.localMultiViewer = await localMultiViewerFlow(browser, state);
     report.flows.localMobileLandscape844 = await localMobileLandscapeFlow(browser, state);
     report.flows.localMobileKeyboard390 = await localMobileKeyboardFlow(browser, state);
     report.flows.localMobileNotifications390 = await localMobileNotificationsFlow(browser, state);
@@ -1152,7 +1213,7 @@ async function main() {
     report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMultiViewer && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),

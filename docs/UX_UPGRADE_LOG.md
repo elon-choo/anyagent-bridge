@@ -55,6 +55,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 42 | Phone landscape width bypassed the mobile touch-target rules, making toolbar and dock controls as short as 15-35px at 844x390. | 4 | 5 | 20 | Implemented | Round 28 applies mobile touch rules to short landscape viewports and adds a tracked 844x390 landscape flow to final acceptance. |
 | 43 | The tracked final acceptance did not prove the compose/send path remains reachable when a phone soft keyboard shrinks the viewport. | 5 | 5 | 25 | Implemented | Round 29 adds a 390px mobile keyboard-shrink flow that focuses compose, shrinks the viewport to 560px high, verifies input/send visibility and 44px controls, sends a command, and cleans the session. |
 | 44 | The tracked final acceptance did not prove the physical-smoke notification step: switching Quiet and back to Important with persistence on mobile. | 4 | 5 | 20 | Implemented | Round 30 adds a 390px mobile Notifications flow that switches Quiet, verifies it after reopening, switches Important, verifies it after reopening, and checks 44px+ mode controls. |
+| 45 | The tracked final acceptance did not prove simultaneous multi-viewer control: a second browser deep-linking to an existing session and both viewers receiving output. | 5 | 5 | 25 | Implemented | Round 31 adds a two-context multi-viewer flow: secondary opens `?session=<id>`, attaches to the same session, sends `echo FINAL_MULTIVIEW`, and both viewers see output. |
 
 Round 1 verification:
 
@@ -364,3 +365,11 @@ Round 30 evidence:
 - Latest `npm run test:ux-final` passed with `localMobileNotifications390.quietSelected`, `quietPersists`, `importantSelected`, `importantPersists`, `singleActiveMode`, `touchSafe`, and `noOverflow` all true.
 - The notification mode buttons measured 308x51 at 390px width, and only one `role="radio"` option was active after each mode change.
 - Temporary sessions 269, 270, 271, 272, 273, 274, 275, and 276 were deleted; session count returned from 37 to 37.
+
+Round 31 evidence:
+
+- Added `localMultiViewer` to `test/final-ux-acceptance.js`.
+- The runner now opens a primary desktop view, deep-links a secondary browser context with `?session=<id>`, verifies the secondary attaches to the same session and cleans the URL, sends `echo FINAL_MULTIVIEW` from the secondary compose box, and verifies both viewers render the output with no horizontal overflow.
+- Latest `npm run test:ux-final` passed with `localMultiViewer.sameSession`, `secondaryReconnect`, `secondaryUrlCleaned`, `secondaryNoStarter`, `secondarySendToAgent`, `primarySawOutput`, `secondarySawOutput`, and `noOverflow` all true.
+- The primary and secondary viewers both attached to session 280; screenshots were written to `/tmp/anyagent-bridge-final-audit/local-multiviewer-primary.png` and `/tmp/anyagent-bridge-final-audit/local-multiviewer-secondary.png`.
+- Temporary sessions 277, 278, 279, 280, 281, 282, 283, 284, and 285 were deleted; session count returned from 37 to 37.
