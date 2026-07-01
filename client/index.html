@@ -2474,6 +2474,14 @@
     ci.addEventListener("compositionend", () => { composing = false; });
     function autogrow() { ci.style.height = "auto"; ci.style.height = Math.min(ci.scrollHeight, 132) + "px"; }
     function composeDraftKey(id) { return STORAGE.composeDraft + (id || "pending"); }
+    function purgeSessionLocalState(id) {
+      storageRemove(composeDraftKey(id));
+      storageRemove(terminalScrollKey(id));
+      if (String(id || "") === String(currentSessionId || "")) {
+        pendingTerminalScrollRestore = null;
+        draftSessionKey = null;
+      }
+    }
     function saveComposeDraft() {
       const key = composeDraftKey(currentSessionId);
       if (ci.value) storageSet(key, ci.value);
@@ -2740,7 +2748,16 @@
         const r = await fetch("/api/sessions/" + s.sessionId, { method: "DELETE", credentials: "include", headers: token ? { Authorization: "Bearer " + token } : {} });
         if (!r.ok) throw new Error("delete failed");
       } catch (_) { toast("Close failed", true); return; }
-      if (s.sessionId === currentSessionId) { targetSessionId = null; hardReconnect(); }
+      const wasCurrent = s.sessionId === currentSessionId;
+      purgeSessionLocalState(s.sessionId);
+      if (wasCurrent) {
+        ci.value = "";
+        draftSessionKey = null;
+        hideAgentAssist();
+        autogrow();
+        targetSessionId = null;
+        hardReconnect();
+      }
       loadSessions();
     }
     function clearSessionFilter() {

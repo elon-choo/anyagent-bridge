@@ -715,6 +715,53 @@ async function localMultiViewerFlow(browser, state) {
   };
 }
 
+async function localCloseCurrentFlow(browser, state) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-close-current');
+  await openApp(page, BASE_URL);
+  const firstSession = await waitForTracker(tracker, item => item.sessionIds[0], 'close-current initial session');
+
+  await page.fill('#composeInput', 'CLOSE_CURRENT_DRAFT');
+  await page.evaluate((id) => {
+    localStorage.setItem(`aab.terminalScroll.${id}`, JSON.stringify({ scrollTop: 123, maxScroll: 456, at: Date.now() }));
+  }, firstSession);
+  const before = await page.evaluate((id) => ({
+    compose: document.querySelector('#composeInput')?.value || '',
+    oldDraft: localStorage.getItem(`aab.composeDraft.${id}`),
+    oldScroll: localStorage.getItem(`aab.terminalScroll.${id}`)
+  }), firstSession);
+
+  const readyIndex = tracker.received.length;
+  await openSessionsModal(page);
+  await page.click('#sessModal .sx-item.cur .kill');
+  await page.waitForSelector('#sessModal .sx-item.cur .sx-confirm', { timeout: 15000 });
+  await page.click('#sessModal .sx-item.cur .sx-confirm .danger');
+  const replacementReady = await waitForTracker(tracker, item => item.received.slice(readyIndex).find(frame =>
+    frame.type === 'ready' &&
+    frame.sessionId &&
+    String(frame.sessionId) !== String(firstSession) &&
+    frame.isReconnect === false
+  ), 'close-current replacement session', 20000);
+  await waitForStatus(page, 'connected', 20000);
+  await page.waitForTimeout(800);
+
+  const secondSession = replacementReady.sessionId;
+  const after = await page.evaluate((ids) => ({
+    compose: document.querySelector('#composeInput')?.value || '',
+    oldDraft: localStorage.getItem(`aab.composeDraft.${ids.first}`),
+    oldScroll: localStorage.getItem(`aab.terminalScroll.${ids.first}`),
+    newDraft: localStorage.getItem(`aab.composeDraft.${ids.second}`),
+    newScroll: localStorage.getItem(`aab.terminalScroll.${ids.second}`)
+  }), { first: firstSession, second: secondSession });
+  const snapshot = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-close-current-after.png'), fullPage: true });
+
+  await context.close();
+  state.createdSessions.delete(firstSession);
+  return { firstSession, secondSession, replacementReady, tracker, before, after, snapshot };
+}
+
 async function localMobileLandscapeFlow(browser, state) {
   const context = await browser.newContext({
     viewport: { width: 844, height: 390 },
@@ -1074,6 +1121,7 @@ function buildChecks(report) {
   const desktop = report.flows.localDesktop;
   const mobile = report.flows.localMobile320;
   const multi = report.flows.localMultiViewer;
+  const closeCurrent = report.flows.localCloseCurrent;
   const landscape = report.flows.localMobileLandscape844;
   const keyboard = report.flows.localMobileKeyboard390;
   const notifications = report.flows.localMobileNotifications390;
@@ -1155,6 +1203,19 @@ function buildChecks(report) {
         hasReceived(multi.trackerB, 'output', item => /FINAL_MULTIVIEW/.test(item.sample || '')),
       noOverflow: !multi.primaryInitial.overflowX && !multi.secondaryInitial.overflowX &&
         !multi.primaryAfter.overflowX && !multi.secondaryAfter.overflowX
+    },
+    localCloseCurrent: {
+      replacementSession: !!closeCurrent.firstSession && !!closeCurrent.secondSession &&
+        String(closeCurrent.firstSession) !== String(closeCurrent.secondSession) &&
+        closeCurrent.replacementReady && closeCurrent.replacementReady.isReconnect === false,
+      draftSeeded: closeCurrent.before.compose === 'CLOSE_CURRENT_DRAFT' &&
+        closeCurrent.before.oldDraft === 'CLOSE_CURRENT_DRAFT' &&
+        !!closeCurrent.before.oldScroll,
+      composeCleared: closeCurrent.after.compose === '',
+      oldStatePurged: !closeCurrent.after.oldDraft && !closeCurrent.after.oldScroll,
+      replacementStateClean: !closeCurrent.after.newDraft && !closeCurrent.after.newScroll,
+      starterOpen: !!closeCurrent.snapshot.starterOpen,
+      noOverflow: !closeCurrent.snapshot.overflowX
     },
     localMobileLandscape844: {
       newSession: !!landscape.initialSession,
@@ -1270,6 +1331,7 @@ async function main() {
     report.flows.localDesktop = await localDesktopFlow(browser, state);
     report.flows.localMobile320 = await localMobileFlow(browser, state);
     report.flows.localMultiViewer = await localMultiViewerFlow(browser, state);
+    report.flows.localCloseCurrent = await localCloseCurrentFlow(browser, state);
     report.flows.localMobileLandscape844 = await localMobileLandscapeFlow(browser, state);
     report.flows.localMobileKeyboard390 = await localMobileKeyboardFlow(browser, state);
     report.flows.localMobileNotifications390 = await localMobileNotificationsFlow(browser, state);
@@ -1295,7 +1357,7 @@ async function main() {
     report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMultiViewer && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMultiViewer && report.flows.localCloseCurrent && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),

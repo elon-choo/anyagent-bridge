@@ -58,6 +58,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 45 | The tracked final acceptance did not prove simultaneous multi-viewer control: a second browser deep-linking to an existing session and both viewers receiving output. | 5 | 5 | 25 | Implemented | Round 31 adds a two-context multi-viewer flow: secondary opens `?session=<id>`, attaches to the same session, sends `echo FINAL_MULTIVIEW`, and both viewers see output. |
 | 46 | Reconnecting while scrolled up in terminal history jumped the user back to the top of server replayed scrollback. | 5 | 5 | 25 | Implemented | Round 32 captures the xterm viewport before unintended reconnects, restores it after same-session replay, and adds final acceptance that preserves `scrollTop` and visible rows across offline/online. |
 | 47 | Reloading or restarting the app after scrolling terminal history did not restore the same visible terminal position. | 5 | 5 | 25 | Implemented | Round 33 stores terminal viewport per session, restores it after same-session reload replay, and adds final acceptance that reload preserves `scrollTop`, visible rows, and the same session id. |
+| 48 | Closing the current session could carry its unsent compose draft into the replacement session and leave old local draft/scroll keys behind. | 5 | 5 | 25 | Implemented | Round 34 purges closed-session local state, clears compose before replacement reconnect, and adds final acceptance for closing the current session from the Sessions UI. |
 
 Round 1 verification:
 
@@ -391,3 +392,11 @@ Round 33 evidence:
 - Extended `test/final-ux-acceptance.js` so local desktop reload must return a `ready` frame for the same session with `isReconnect: true` and preserve the same terminal `scrollTop` plus first visible row.
 - Latest `npm run test:ux-final` passed with `localDesktop.reloadSameSession` and `reloadScrollPositionPreserved` true; session 309 reattached after reload, and reload stayed at `scrollTop: 548` with top row `FINAL_SCROLL_33`.
 - Temporary sessions 309, 310, 311, 312, 313, 314, 315, 316, and 317 were deleted; session count returned from 37 to 37.
+
+Round 34 evidence:
+
+- Focused before probe: closing current session 318 with compose `CLOSE_LEAK_DRAFT_ROUND34` left the compose box populated, kept `aab.composeDraft.318` and `aab.terminalScroll.318`, and wrote the old draft into replacement session 319.
+- Added closed-session local-state purge for compose drafts and terminal scroll metadata, and clear the compose box before reconnecting to a replacement session after closing the current session.
+- Focused after probe: closing current session 320 created replacement 321 with empty compose, no old draft/scroll keys, and no replacement draft key; session count returned from 37 to 37.
+- Added `localCloseCurrent` to `test/final-ux-acceptance.js`; latest `npm run test:ux-final` passed `replacementSession`, `draftSeeded`, `composeCleared`, `oldStatePurged`, `replacementStateClean`, `starterOpen`, and `noOverflow`.
+- In the latest run, current session 326 was closed through the UI, replacement session 327 stayed clean, and temporary sessions 322, 323, 324, 325, 327, 328, 329, 330, 331, and 332 were deleted; session count returned from 37 to 37.
