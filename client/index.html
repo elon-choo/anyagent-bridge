@@ -542,11 +542,11 @@
 <input type="file" id="imgFile" accept="image/*" style="display:none" />
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-<div id="sessModal">
+<div id="sessModal" role="dialog" aria-modal="true" aria-labelledby="sessTitle" aria-describedby="sessSub">
   <div class="card">
     <button class="pm-close" id="sessClose" aria-label="Close">×</button>
-    <h2>Sessions</h2>
-    <p class="sub">Each session is a terminal that keeps running on your computer. Switch between them, rename, or close.</p>
+    <h2 id="sessTitle">Sessions</h2>
+    <p class="sub" id="sessSub">Each session is a terminal that keeps running on your computer. Switch between them, rename, or close.</p>
     <div class="sx-tools">
       <input class="sx-filter" id="sxFilter" type="search" placeholder="Search sessions" aria-label="Search sessions" autocomplete="off" spellcheck="false" />
       <span class="sx-count" id="sxCount"></span>
@@ -577,11 +577,11 @@
   </div>
 </div>
 
-<div id="onboard">
+<div id="onboard" role="dialog" aria-modal="true" aria-labelledby="obTitle" aria-describedby="obSub">
   <div class="card">
     <button class="ob-close" id="obClose" aria-label="Close">×</button>
-    <h2>Connect a device</h2>
-    <p class="sub">Open this bridge on your phone or another computer. Scan the code, or follow the steps below.</p>
+    <h2 id="obTitle">Connect a device</h2>
+    <p class="sub" id="obSub">Open this bridge on your phone or another computer. Scan the code, or follow the steps below.</p>
     <div class="qrbox" id="obQrBox"><div id="obQr"></div></div>
     <p class="qrcap" id="obQrCap"></p>
     <div class="blk" id="obPhone">
@@ -603,11 +603,11 @@
   </div>
 </div>
 
-<div id="projModal">
+<div id="projModal" role="dialog" aria-modal="true" aria-labelledby="pmTitle" aria-describedby="pmSub">
   <div class="card">
     <button class="pm-close" id="pmClose" aria-label="Close">×</button>
-    <h2>Projects</h2>
-    <p class="sub">A project scopes an agent session to a folder. Add one by browsing — no typing the full path.</p>
+    <h2 id="pmTitle">Projects</h2>
+    <p class="sub" id="pmSub">A project scopes an agent session to a folder. Add one by browsing — no typing the full path.</p>
     <ul class="pm-list" id="pmList"></ul>
     <p class="pm-empty" id="pmEmpty" style="display:none">No projects yet.</p>
     <div class="pm-add">
@@ -624,11 +624,11 @@
   </div>
 </div>
 
-<div id="secModal">
+<div id="secModal" role="dialog" aria-modal="true" aria-labelledby="secTitle" aria-describedby="secSub">
   <div class="card">
     <button class="pm-close" id="secClose" aria-label="Close">×</button>
-    <h2>Secrets <span class="dim">(.env.local)</span></h2>
-    <p class="sub">Save API keys and tokens into a project's <code>.env.local</code> — the agent you launch there reads them. They go straight to a file, never through the chat or terminal.</p>
+    <h2 id="secTitle">Secrets <span class="dim">(.env.local)</span></h2>
+    <p class="sub" id="secSub">Save API keys and credentials into a project's <code>.env.local</code> — the agent you launch there reads them. They go straight to a file, never through the chat or terminal.</p>
     <p class="pm-empty" id="secNoProj" style="display:none">Add a project first with the <b>📁 Projects</b> button — secrets are saved into a project folder.</p>
     <div id="secEditor">
       <div class="sec-field">
@@ -649,9 +649,9 @@
   </div>
 </div>
 
-<div id="fileExp">
+<div id="fileExp" role="dialog" aria-modal="true" aria-labelledby="fxTitle">
   <div class="fx-head">
-    <h2>📂 Files</h2>
+    <h2 id="fxTitle">📂 Files</h2>
     <span class="fx-crumb" id="fxCrumb">…</span>
     <div class="fx-tools">
       <button class="fx-btn" id="fxNewFile">📄 New file</button>
@@ -682,7 +682,7 @@
       </div>
     </div>
   </div>
-  <div class="fx-dialog" id="fxDialog" aria-hidden="true">
+  <div class="fx-dialog" id="fxDialog" role="dialog" aria-modal="true" aria-labelledby="fxDialogTitle" aria-describedby="fxDialogMsg" aria-hidden="true">
     <form class="fx-dialog-card" id="fxDialogForm">
       <h3 id="fxDialogTitle">File action</h3>
       <p id="fxDialogMsg"></p>
@@ -1291,6 +1291,7 @@
   }
   async function openOnboard() {
     onboard.classList.add("open");
+    setTimeout(() => obClose.focus(), 0);
     const port = location.port || (location.protocol === "https:" ? "443" : "80");
     $("obLocalUrl").textContent = location.origin + "/";
     $("obLanMsg").innerHTML =
@@ -1448,6 +1449,7 @@
     projModal.classList.add("open");
     $("pmErr").textContent = "";
     $("pmName").value = ""; $("pmName").dataset.auto = "1";
+    setTimeout(() => pmClose.focus(), 0);
     pmLoadList();
     pmBrowse(null);   // start at the server's home / first allowed base
   }
@@ -1617,7 +1619,7 @@
     try { await secWrite(); } catch (e) { secRaw = prev; $("secErr").textContent = "Could not save: " + e.message; return; }
     secRender();
   }
-  function openSecrets() { secModal.classList.add("open"); $("secErr").textContent = ""; $("secKey").value = ""; $("secVal").value = ""; secLoadProjects(); }
+  function openSecrets() { secModal.classList.add("open"); $("secErr").textContent = ""; $("secKey").value = ""; $("secVal").value = ""; setTimeout(() => secClose.focus(), 0); secLoadProjects(); }
   function closeSecrets() { secModal.classList.remove("open"); }
   secBtn.addEventListener("click", openSecrets);
   secClose.addEventListener("click", closeSecrets);
@@ -1900,7 +1902,7 @@
       const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = fxFname.textContent || "file.txt"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000);
     }
 
-    function openFiles() { fileExp.classList.add("open"); const start = (projectSel && projectSel.value) || null; loadTree(start || null); }
+    function openFiles() { fileExp.classList.add("open"); setTimeout(() => $("fxClose").focus(), 0); const start = (projectSel && projectSel.value) || null; loadTree(start || null); }
     async function closeFiles(force) { if (!force && fxDirty && !(await askDiscard("close Files"))) return; fileExp.classList.remove("open"); }
 
     $("filesBtn").addEventListener("click", openFiles);
@@ -2339,7 +2341,7 @@
       sxFilter.value = "";
       renderSessions();
     }
-    function openSess() { clearSessionFilter(); sessModal.classList.add("open"); loadSessions(); }
+    function openSess() { clearSessionFilter(); sessModal.classList.add("open"); setTimeout(() => sxFilter.focus(), 0); loadSessions(); }
     function closeSess() { sessModal.classList.remove("open"); clearSessionFilter(); }
     $("sessBtn").addEventListener("click", openSess);
     $("sessClose").addEventListener("click", closeSess);

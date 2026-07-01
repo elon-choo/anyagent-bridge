@@ -41,6 +41,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 28 | Markdown Preview mode was hidden on mobile by the small-screen file explorer CSS. | 3 | 5 | 15 | Implemented | Round 10 adds a mobile preview mode that hides the tree and shows the preview pane full-width. |
 | 29 | File editor still used native dialogs for dirty-file close/switch, overwrite after a file changed on disk, and file errors. | 4 | 5 | 20 | Implemented | Round 11 routes dirty/discard, overwrite, and file-error states through the in-app file action sheet; native dialogs 0 in focused test. |
 | 30 | Notification setup failures used native browser alerts and had no accessible in-app status. | 4 | 5 | 20 | Implemented | Round 12 routes permission/VAPID/subscribe/setup results through the shared toast; denied-permission focused test had native dialogs 0. |
+| 31 | Major overlays looked modal but lacked dialog semantics and left focus on toolbar buttons behind them. | 3 | 5 | 15 | Implemented | Round 14 adds dialog/label/modal ARIA wiring and initial focus for Connect, Projects, Secrets, Files, file actions, and Sessions. |
 
 Round 1 verification:
 
@@ -204,3 +205,14 @@ Round 13 evidence:
 - Full 320/390 reduced-motion audit: button/toast transition durations `0s`, toast vertical offset 0, 0 audited controls under 44px, toolbar hidden controls 0, horizontal document overflow 0, native dialogs 0.
 - Test cleanup removed temp sessions 143, 144, 145, 146, 147, and 148 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round13/full/`.
+
+Round 14 evidence:
+
+- Before focused modal accessibility probe: Connect, Projects, Secrets, Files, file action sheet, and Sessions had no `role`, no `aria-modal`, no label wiring, and focus stayed on the toolbar button behind each opened overlay.
+- Added `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, and descriptions where useful for Connect, Projects, Secrets, Files, file actions, and Sessions.
+- Opening Connect, Projects, Secrets, and Files now moves focus to the modal close button; opening Sessions moves focus to search; file actions continue to focus the input/OK control.
+- Focused after probe: all six overlays were named modal dialogs, focus was inside each dialog, page errors 0, native dialogs 0, and session count stayed 37.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, project-scoped agent start, manual `sendToAgent`, image attach, Tab special key, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, file action dialog, and notification denied toast all passed.
+- Full 320/390 audit: Connect dialog role/label/focus verified, 0 audited controls under 44px, toolbar hidden controls 0, horizontal document overflow 0, native dialogs 0.
+- Test cleanup removed temp sessions 149, 150, 151, 152, 153, and 154 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round14/full/`.
