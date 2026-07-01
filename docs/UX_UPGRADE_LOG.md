@@ -31,7 +31,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Verified OK | Round 2 confirmed `icon-192.png`, `icon-512.png`, and `icon-maskable-512.png` are tracked and served with 200. |
 | 19 | Reconnect/offline state can remain visually `connected` briefly after network loss. | 3 | 3 | 9 | Implemented | Round 3 desktop/mobile forced-offline tests show immediate `offline`, still `offline` after delay, then `connected` after online restore. |
 | 20 | File creation, rename, and delete still rely on `prompt` / `confirm`, which is rough on mobile. | 3 | 3 | 9 | Implemented | Round 7 replaces file create/folder/rename/delete dialogs with an in-app action sheet and makes row actions visible 44px+ targets on mobile. |
-| 21 | Notification settings are one-button only; there is no quiet/noise control. | 3 | 3 | 9 | Backlog | Code inspection of push setup. |
+| 21 | Notification settings are one-button only; there is no quiet/noise control. | 3 | 3 | 9 | Implemented | Round 16 adds a notification settings modal with All, Important, Quiet, and Paused modes enforced by the service worker per device. |
 | 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Implemented | Round 2 added a persistent top-bar exposure badge: Local, Network, or Tunnel. |
 | 23 | Markdown preview depends on runtime CDN loading. | 3 | 3 | 9 | Implemented | Round 10 falls back to raw Markdown with an inline warning when marked/DOMPurify cannot load. |
 | 24 | Reduced-motion and animation preferences are not explicitly handled. | 2 | 4 | 8 | Implemented | Round 13 adds a `prefers-reduced-motion: reduce` CSS override; focused after test measured button/toast transitions at `0s`. |
@@ -228,3 +228,15 @@ Round 15 evidence:
 - Full 320/390/1440 audit: horizontal document overflow 0, 320px page errors 0, 390px page errors 0, desktop page errors 0.
 - Test cleanup removed temp sessions 163 and 164 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round15/full/`.
+
+Round 16 evidence:
+
+- Before focused notification probe: the notification button opened no modal, rendered 0 mode controls, and clicking it went straight into permission setup before showing only a toast on denial.
+- Added a Notifications dialog with four per-device modes: All updates, Important, Quiet, and Paused.
+- The selected mode is saved in `localStorage`, synced to the service worker, and enforced at push-display time: Important suppresses progress, Quiet suppresses progress/done, and Paused suppresses all bridge notifications on that device.
+- Focused after probe: page errors 0, console errors 0, native dialogs 0, four mode controls at 51px tall on mobile, focus inside on open and restored to `notifBtn` on close, Quiet persisted, and service-worker checks showed progress/done suppressed while questions still display.
+- Focused reports/screenshots: `/tmp/anyagent-bridge-ux-round16/before/report.json`, `/tmp/anyagent-bridge-ux-round16/after/report.json`, `/tmp/anyagent-bridge-ux-round16/after/notification-settings.png`.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, real `startAgent`, `sendToAgent`, and raw `input` WebSocket frames, image attach, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, notification mode sync, and service-worker Important filtering all passed.
+- Full 320px notification modal audit: horizontal document overflow 0, page errors 0, console errors 0, four mode controls, all 51px tall.
+- Test cleanup removed temp sessions 165 and 166 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round16/full/`.

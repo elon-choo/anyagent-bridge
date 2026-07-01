@@ -271,6 +271,28 @@
   #secModal .pm-err { color: var(--red); font-size: 12px; min-height: 15px; margin: 6px 0 0; }
   #secModal .sec-note { font-size: 11px; color: var(--muted); margin: 8px 0 0; line-height: 1.5; }
 
+  /* Notifications - per-device noise control */
+  #notifModal { position: fixed; inset: 0; z-index: 60; background: rgba(13,17,23,.96); display: none; align-items: center; justify-content: center; padding: 18px; }
+  #notifModal.open { display: flex; }
+  #notifModal .card { position: relative; background: var(--bar); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto; padding: 20px 22px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  #notifModal h2 { margin: 0 0 2px; font-size: 17px; }
+  #notifModal .sub { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  #notifModal .pm-close { position: absolute; top: 12px; right: 14px; background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+  #notifModal .pm-close:hover { color: var(--fg); }
+  #notifModal .notif-status { border: 1px solid var(--border); border-radius: 8px; background: #0d1117; padding: 10px 12px; margin: 0 0 12px; font-size: 12.5px; color: var(--fg); line-height: 1.45; }
+  #notifModal .notif-status b { color: var(--green); }
+  #notifModal .notif-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+  #notifModal .notif-mode {
+    min-height: 56px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    gap: 3px; padding: 9px 10px; text-align: left; border-radius: 8px; background: #0d1117;
+  }
+  #notifModal .notif-mode strong { font-size: 13px; line-height: 1.1; }
+  #notifModal .notif-mode span { color: var(--muted); font-size: 11px; line-height: 1.25; }
+  #notifModal .notif-mode.on { border-color: var(--accent); background: rgba(47,129,247,.14); }
+  #notifModal .notif-summary { min-height: 18px; margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  #notifModal .notif-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #notifModal .notif-actions .primary { flex: 1 1 180px; min-height: 38px; }
+
   /* Files — explorer + code/markdown editor */
   #fileExp { position: fixed; inset: 0; z-index: 70; background: rgba(13,17,23,.98); display: none; }
   #fileExp.open { display: flex; flex-direction: column; }
@@ -487,11 +509,15 @@
     #onboard .ob-close,
     #projModal .pm-close,
     #secModal .pm-close,
+    #notifModal .pm-close,
     #sessModal .pm-close,
     #fileExp .fx-close {
       min-width: 44px;
       min-height: 44px;
     }
+    #notifModal .notif-modes { grid-template-columns: 1fr; }
+    #notifModal .notif-mode { min-height: 44px; }
+    #notifModal .notif-actions .primary { min-height: 44px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -541,6 +567,33 @@
 </div>
 <input type="file" id="imgFile" accept="image/*" style="display:none" />
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<div id="notifModal" role="dialog" aria-modal="true" aria-labelledby="notifTitle" aria-describedby="notifSub">
+  <div class="card">
+    <button class="pm-close" id="notifClose" aria-label="Close">×</button>
+    <h2 id="notifTitle">Notifications</h2>
+    <p class="sub" id="notifSub">Choose how much this device shows when agent sessions report back.</p>
+    <div class="notif-status" id="notifStatus" aria-live="polite">Checking this device...</div>
+    <div class="notif-modes" id="notifModes" role="radiogroup" aria-label="Notification level">
+      <button type="button" class="notif-mode" data-push-mode="all" role="radio" aria-checked="false">
+        <strong>All updates</strong><span>Progress, done, questions</span>
+      </button>
+      <button type="button" class="notif-mode" data-push-mode="important" role="radio" aria-checked="false">
+        <strong>Important</strong><span>Done and questions</span>
+      </button>
+      <button type="button" class="notif-mode" data-push-mode="quiet" role="radio" aria-checked="false">
+        <strong>Quiet</strong><span>Questions only</span>
+      </button>
+      <button type="button" class="notif-mode" data-push-mode="paused" role="radio" aria-checked="false">
+        <strong>Paused</strong><span>Show nothing here</span>
+      </button>
+    </div>
+    <p class="notif-summary" id="notifSummary"></p>
+    <div class="notif-actions">
+      <button type="button" class="primary" id="notifEnable">Enable on this device</button>
+    </div>
+  </div>
+</div>
 
 <div id="sessModal" role="dialog" aria-modal="true" aria-labelledby="sessTitle" aria-describedby="sessSub">
   <div class="card">
@@ -733,7 +786,8 @@
   const STORAGE = {
     lastSession: "aab.lastSessionId",
     selectedProject: "aab.selectedProjectPath",
-    composeDraft: "aab.composeDraft."
+    composeDraft: "aab.composeDraft.",
+    pushMode: "aab.pushMode"
   };
   function storageGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
   function storageSet(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
@@ -1990,29 +2044,119 @@
 
   // ---------- Push notifications (opt-in) ----------
   (function setupPush() {
-    const notifBtn = $("notifBtn");
+    const notifBtn = $("notifBtn"), notifModal = $("notifModal"), notifClose = $("notifClose");
+    const notifStatus = $("notifStatus"), notifSummary = $("notifSummary"), notifEnable = $("notifEnable");
+    const notifModes = $("notifModes");
     if (!notifBtn) return;
     const supported = window.isSecureContext && ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
     if (!supported) { notifBtn.style.display = "none"; return; } // push needs a secure context (https / localhost)
     let swReg = null;
-    navigator.serviceWorker.register("/sw.js").then((r) => { swReg = r; }).catch(() => {});
+    let notifSubscribed = false;
+    let notifBusy = false;
+    const PUSH_MODES = {
+      all: { label: "All updates", toolbar: "🔔 All", summary: "This device shows progress, done, and question notifications." },
+      important: { label: "Important", toolbar: "🔔 Important", summary: "This device shows done and question notifications." },
+      quiet: { label: "Quiet", toolbar: "🔕 Quiet", summary: "This device shows only question notifications." },
+      paused: { label: "Paused", toolbar: "🔕 Paused", summary: "This device suppresses all bridge notifications." }
+    };
+    navigator.serviceWorker.register("/sw.js").then((r) => { swReg = r; syncPushPrefs(); refreshPushStatus(); }).catch(() => {});
 
     function pf(p, opts) { opts = opts || {}; opts.credentials = "include"; opts.headers = Object.assign(opts.headers || {}, token ? { Authorization: "Bearer " + token } : {}); return fetch(p, opts); }
     function b64ToU8(b64) { const pad = "=".repeat((4 - (b64.length % 4)) % 4); const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/"); const raw = atob(s); const u = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) u[i] = raw.charCodeAt(i); return u; }
 
-    async function enable() {
-      const originalText = notifBtn.textContent;
+    function pushMode() {
+      const mode = storageGet(STORAGE.pushMode) || "all";
+      return PUSH_MODES[mode] ? mode : "all";
+    }
+    function pushPrefs() { return { mode: pushMode() }; }
+    async function syncPushPrefs() {
+      try {
+        swReg = swReg || await navigator.serviceWorker.ready;
+        const target = (swReg && swReg.active) || navigator.serviceWorker.controller;
+        if (target && target.postMessage) target.postMessage({ type: "aabPushPrefs", prefs: pushPrefs() });
+      } catch (_) {}
+    }
+    function renderPushUi() {
+      const mode = pushMode();
+      const info = PUSH_MODES[mode];
+      notifBtn.textContent = notifSubscribed ? info.toolbar : "🔔 알림";
+      notifBtn.title = notifSubscribed
+        ? ("Notifications on this device: " + info.label)
+        : "Set up push notifications for this device";
+      if (notifSummary) notifSummary.textContent = info.summary;
+      if (notifModes) {
+        Array.from(notifModes.querySelectorAll("[data-push-mode]")).forEach((btn) => {
+          const on = btn.dataset.pushMode === mode;
+          btn.classList.toggle("on", on);
+          btn.setAttribute("aria-checked", on ? "true" : "false");
+        });
+      }
+      const perm = Notification.permission || "default";
+      if (notifStatus) {
+        const label = document.createElement("b");
+        const text = document.createTextNode(
+          perm === "denied" ? " in browser settings." :
+          notifSubscribed ? " on this device." :
+          perm === "granted" ? " to enable on this device." :
+          " on this device."
+        );
+        label.textContent = perm === "denied" ? "Blocked" : notifSubscribed ? "Enabled" : perm === "granted" ? "Ready" : "Not enabled";
+        notifStatus.replaceChildren(label, text);
+      }
+      if (notifEnable) notifEnable.textContent = notifSubscribed ? "Send test notification" : "Enable on this device";
+    }
+    async function refreshPushStatus() {
+      try {
+        swReg = swReg || await navigator.serviceWorker.ready;
+        const sub = swReg && swReg.pushManager ? await swReg.pushManager.getSubscription() : null;
+        notifSubscribed = !!sub;
+      } catch (_) { notifSubscribed = false; }
+      renderPushUi();
+    }
+    function setPushMode(mode) {
+      if (!PUSH_MODES[mode]) return;
+      storageSet(STORAGE.pushMode, mode);
+      renderPushUi();
+      syncPushPrefs();
+      toast("Notification mode: " + PUSH_MODES[mode].label);
+    }
+    function openNotif() {
+      showDialog(notifModal, notifEnable, notifBtn);
+      renderPushUi();
+      refreshPushStatus();
+      syncPushPrefs();
+    }
+    function closeNotif() { hideDialog(notifModal); }
+
+    async function enableOrTest() {
+      if (notifBusy) return;
+      notifBusy = true;
       notifBtn.disabled = true;
-      notifBtn.textContent = "🔔 설정 중...";
+      notifEnable.disabled = true;
+      const modeInfo = PUSH_MODES[pushMode()];
+      notifBtn.textContent = "🔔 Setting...";
+      notifEnable.textContent = notifSubscribed ? "Sending..." : "Enabling...";
       function fail(msg) {
+        notifBusy = false;
         notifBtn.disabled = false;
-        notifBtn.textContent = originalText;
+        notifEnable.disabled = false;
+        renderPushUi();
         toast(msg, true);
       }
       try {
+        swReg = swReg || await navigator.serviceWorker.ready;
+        if (notifSubscribed) {
+          const tr = await pf("/api/push/test", { method: "POST" });
+          if (!tr.ok) { fail("Test notification failed."); return; }
+          notifBusy = false;
+          notifBtn.disabled = false;
+          notifEnable.disabled = false;
+          renderPushUi();
+          toast("Test notification sent. Mode: " + modeInfo.label + ".");
+          return;
+        }
         const perm = await Notification.requestPermission();
         if (perm !== "granted") { fail("알림 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 알림을 허용해 주세요."); return; }
-        swReg = swReg || await navigator.serviceWorker.ready;
         const vr = await pf("/api/push/vapid");
         if (!vr.ok) { fail("이 서버에서는 푸시 알림을 쓸 수 없습니다."); return; }
         const { publicKey } = await vr.json();
@@ -2020,16 +2164,28 @@
         const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(publicKey) });
         const sr = await pf("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub }) });
         if (!sr.ok) { fail("기기 등록에 실패했습니다."); return; }
+        await syncPushPrefs();
         await pf("/api/push/test", { method: "POST" }).catch(() => {}); // immediate confirmation buzz
-        notifBtn.textContent = "🔔 알림 켜짐";
-        notifBtn.title = "이 기기는 세션 알림을 받습니다";
+        notifSubscribed = true;
+        notifBusy = false;
         notifBtn.disabled = false;
-        toast("알림이 켜졌어요. 테스트 알림을 보냈습니다.");
+        notifEnable.disabled = false;
+        renderPushUi();
+        toast("알림이 켜졌어요. Mode: " + modeInfo.label + ".");
       } catch (e) {
         fail("알림 설정 실패: " + ((e && e.message) || e));
       }
     }
-    notifBtn.addEventListener("click", enable);
+    if (notifModes) notifModes.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest && e.target.closest("[data-push-mode]");
+      if (btn) setPushMode(btn.dataset.pushMode);
+    });
+    notifBtn.addEventListener("click", openNotif);
+    notifClose.addEventListener("click", closeNotif);
+    notifEnable.addEventListener("click", enableOrTest);
+    notifModal.addEventListener("click", (e) => { if (e.target === notifModal) closeNotif(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && notifModal.classList.contains("open")) closeNotif(); });
+    renderPushUi();
   })();
 
   // ---------- Mobile input dock: key bar · compose box · image · sessions ----------
