@@ -361,8 +361,22 @@ async function waitForSessionRow(page, sessionId, label) {
     .some(row => row.dataset.sessionId === String(id)), String(sessionId), label);
 }
 
+async function composeValue(page) {
+  return page.evaluate(() => document.querySelector('#composeInput')?.value || '');
+}
+
+async function switchToSession(page, tracker, sessionId, label) {
+  const readyIndex = tracker.received.length;
+  await page.click(`#sxList .sx-item[data-session-id="${sessionId}"]`);
+  await waitForTracker(tracker, item => item.received.slice(readyIndex).some(frame =>
+    frame.type === 'ready' && String(frame.sessionId) === String(sessionId)
+  ), `${label} ready`, 20000);
+  await waitForStatus(page, 'connected', 20000);
+}
+
 async function verifySessionSwitch(page, tracker) {
   const firstSession = await waitForTracker(tracker, item => item.sessionIds[0], 'initial desktop session');
+  const firstDraftBeforeSwitch = await composeValue(page);
   await openSessionsModal(page);
   await waitForSessionRow(page, firstSession, 'initial session row');
 
@@ -378,24 +392,37 @@ async function verifySessionSwitch(page, tracker) {
     return ready && ready.sessionId;
   }, 'new session ready', 20000);
   await waitForStatus(page, 'connected', 20000);
+  const secondInitialDraft = await composeValue(page);
 
   await page.fill('#composeInput', 'echo FINAL_SWITCH_SECOND');
   await page.click('#composeSend');
   await waitFor(page, () => document.body.innerText.includes('FINAL_SWITCH_SECOND'), null, 'second session output', 15000);
   const secondBody = await page.evaluate(() => document.body ? document.body.innerText : '');
+  const secondDraft = 'SECOND_UNSENT_DRAFT_ROUND26';
+  await page.fill('#composeInput', secondDraft);
+  await waitFor(page, expected => document.querySelector('#composeInput')?.value === expected, secondDraft, 'second session draft entry');
 
   await openSessionsModal(page);
   await waitForSessionRow(page, firstSession, 'switch-back session row');
   await waitForSessionRow(page, secondSession, 'current second session row');
 
-  const backReadyIndex = tracker.received.length;
-  await page.click(`#sxList .sx-item[data-session-id="${firstSession}"]`);
-  await waitForTracker(tracker, item => item.received.slice(backReadyIndex).some(frame =>
-    frame.type === 'ready' && String(frame.sessionId) === String(firstSession)
-  ), 'switch back ready', 20000);
-  await waitForStatus(page, 'connected', 20000);
+  await switchToSession(page, tracker, firstSession, 'switch back');
   await waitFor(page, () => document.body.innerText.includes('FINAL_DESKTOP'), null, 'original session output after switch back', 20000);
+  await waitFor(page, expected => document.querySelector('#composeInput')?.value === expected, firstDraftBeforeSwitch, 'first session draft restore');
   const firstBody = await page.evaluate(() => document.body ? document.body.innerText : '');
+  const firstDraftAfterBack = await composeValue(page);
+
+  await openSessionsModal(page);
+  await waitForSessionRow(page, secondSession, 'second draft session row');
+  await switchToSession(page, tracker, secondSession, 'second draft restore');
+  await waitFor(page, expected => document.querySelector('#composeInput')?.value === expected, secondDraft, 'second session draft restore');
+  const secondDraftAfterReturn = await composeValue(page);
+
+  await openSessionsModal(page);
+  await waitForSessionRow(page, firstSession, 'final first session row');
+  await switchToSession(page, tracker, firstSession, 'final switch back');
+  await waitFor(page, expected => document.querySelector('#composeInput')?.value === expected, firstDraftBeforeSwitch, 'final first session draft restore');
+  const firstDraftAfterFinalBack = await composeValue(page);
 
   return {
     firstSession,
@@ -403,7 +430,12 @@ async function verifySessionSwitch(page, tracker) {
     createdDifferent: String(firstSession) !== String(secondSession),
     secondCommandVisible: secondBody.includes('FINAL_SWITCH_SECOND'),
     switchBackReady: true,
-    originalOutputRestored: firstBody.includes('FINAL_DESKTOP')
+    originalOutputRestored: firstBody.includes('FINAL_DESKTOP'),
+    firstDraftContainsUpload: /uploads\/.*pixel\.png/.test(firstDraftBeforeSwitch),
+    secondStartedClean: secondInitialDraft === '',
+    firstDraftRestored: firstDraftAfterBack === firstDraftBeforeSwitch && firstDraftAfterFinalBack === firstDraftBeforeSwitch,
+    secondDraftRestored: secondDraftAfterReturn === secondDraft,
+    secondDraftIsolated: secondDraftAfterReturn === secondDraft && !firstDraftAfterBack.includes(secondDraft)
   };
 }
 
@@ -766,6 +798,12 @@ function buildChecks(report) {
         desktop.sessionSwitch.switchBackReady &&
         desktop.sessionSwitch.originalOutputRestored &&
         hasSent(desktop.tracker, 'sendToAgent', item => item.text === 'echo FINAL_SWITCH_SECOND')),
+      draftIsolation: !!(desktop.sessionSwitch &&
+        desktop.sessionSwitch.firstDraftContainsUpload &&
+        desktop.sessionSwitch.secondStartedClean &&
+        desktop.sessionSwitch.firstDraftRestored &&
+        desktop.sessionSwitch.secondDraftRestored &&
+        desktop.sessionSwitch.secondDraftIsolated),
       modalsAccessible: modalValues.length === 6 && modalValues.every(item =>
         item.opened.open &&
         item.opened.role === 'dialog' &&

@@ -50,6 +50,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 37 | The remaining physical-phone smoke could start with stale tunnel/API/PWA state and waste the tester's first minutes. | 3 | 5 | 15 | Implemented | Round 23 adds `test/phone-smoke-preflight.js` plus `npm run test:phone-preflight`, producing a redacted readiness report before the real phone run. |
 | 38 | The tracked final acceptance still did not deeply exercise the mobile Files editor/Markdown preview path required by the phone smoke. | 4 | 5 | 20 | Implemented | Round 24 adds a 390px mobile Files preview flow to `test/final-ux-acceptance.js` and raises mobile Files editbar/mode controls to touch-safe dimensions. |
 | 39 | The tracked final acceptance still only implied Sessions coverage through modal accessibility, leaving new-session and switch-back behavior easy to regress. | 4 | 5 | 20 | Implemented | Round 25 adds a desktop Sessions flow to `test/final-ux-acceptance.js`: create a second session from the modal, run a command there, switch back to the first session, verify original output, and clean all temp sessions. |
+| 40 | The tracked final acceptance still did not prove unsent compose/image drafts stay isolated while switching sessions. | 5 | 5 | 25 | Implemented | Round 26 extends the desktop Sessions flow to verify the first session's uploaded image draft restores, a new session starts clean, and the second session's unsent draft restores only in that second session. |
 
 Round 1 verification:
 
@@ -321,3 +322,10 @@ Round 25 evidence:
 - The runner now opens Sessions, verifies the current row, creates a new session from `New session`, observes a different `ready` session id, sends `echo FINAL_SWITCH_SECOND`, opens Sessions again, switches back to the original session row, and verifies `FINAL_DESKTOP` output returns.
 - Latest `npm run test:ux-final` passed with `localDesktop.sessionSwitch: true`.
 - Temporary sessions 231, 232, 233, 234, and 235 were deleted; session count returned from 37 to 37.
+
+Round 26 evidence:
+
+- Extended the desktop Sessions workflow in `test/final-ux-acceptance.js` to assert per-session compose draft isolation.
+- The runner now verifies the first session's uploaded `pixel.png` compose draft survives switching away and back, the new second session starts with an empty compose box, and a typed-but-unsent second-session draft restores only when returning to that second session.
+- Latest `npm run test:ux-final` passed with `localDesktop.sessionSwitch: true` and `localDesktop.draftIsolation: true`.
+- Temporary sessions 236, 237, 238, 239, and 240 were deleted; session count returned from 37 to 37.
