@@ -2465,7 +2465,12 @@
         b.title = k.clear ? "Clear terminal display" : "Send " + k.t + " to the terminal";
         const activate = (e) => {
           e.preventDefault();
-          if (k.clear) { if (term) term.clear(); return; }
+          if (k.clear) {
+            if (term) term.clear();
+            send({ type: "input", data: "\x0c" });
+            if (term) term.focus();
+            return;
+          }
           if (!send({ type: "input", data: k.d })) toast("Not connected", true);
           if (term) term.focus();
         };

@@ -277,6 +277,7 @@ async function stateSnapshot(page) {
       bodyHasHome: body.includes('/Users/'),
       bodyHasFinalDesktop: body.includes('FINAL_DESKTOP'),
       bodyHasFinalMultiview: body.includes('FINAL_MULTIVIEW'),
+      bodyHasFinalClearReplay: body.includes('FINAL_CLEAR_REPLAY'),
       composeValue: document.querySelector('#composeInput')?.value || '',
       rows,
       starterRect: rectOf(document.querySelector('#starterPanel')),
@@ -804,6 +805,38 @@ async function localCloseCurrentFlow(browser, state) {
   return { firstSession, secondSession, replacementReady, tracker, before, after, snapshot };
 }
 
+async function localClearReplayFlow(browser, state) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-clear-replay');
+  await openApp(page, BASE_URL);
+  const session = await waitForTracker(tracker, item => item.sessionIds[0], 'clear replay initial session');
+  const marker = 'FINAL_CLEAR_REPLAY';
+
+  await page.fill('#composeInput', `echo ${marker}`);
+  await page.click('#composeSend');
+  await waitFor(page, expected => document.body.innerText.includes(expected), marker, 'clear replay marker output', 15000);
+  const beforeClear = await stateSnapshot(page);
+
+  await page.locator('#keybar .kb').filter({ hasText: /^Clear$/ }).first().click();
+  await waitFor(page, expected => !document.body.innerText.includes(expected), marker, 'clear replay marker hidden', 15000);
+  const afterClear = await stateSnapshot(page);
+
+  const reloadReadyIndex = tracker.received.length;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#terminal .xterm', { timeout: 20000 });
+  await waitForStatus(page, 'connected', 20000);
+  const reloadReady = await waitForTracker(tracker, item => item.received.slice(reloadReadyIndex).find(frame =>
+    frame.type === 'ready' && String(frame.sessionId) === String(session) && frame.isReconnect === true
+  ), 'clear replay reload reconnect', 20000);
+  await page.waitForTimeout(1000);
+  const afterReload = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-clear-replay-after.png'), fullPage: true });
+
+  await context.close();
+  return { session, marker, tracker, beforeClear, afterClear, reloadReady, afterReload };
+}
+
 async function localMobileLandscapeFlow(browser, state) {
   const context = await browser.newContext({
     viewport: { width: 844, height: 390 },
@@ -1164,6 +1197,7 @@ function buildChecks(report) {
   const mobile = report.flows.localMobile320;
   const multi = report.flows.localMultiViewer;
   const closeCurrent = report.flows.localCloseCurrent;
+  const clearReplay = report.flows.localClearReplay;
   const landscape = report.flows.localMobileLandscape844;
   const keyboard = report.flows.localMobileKeyboard390;
   const notifications = report.flows.localMobileNotifications390;
@@ -1262,6 +1296,17 @@ function buildChecks(report) {
       replacementStateClean: !closeCurrent.after.newDraft && !closeCurrent.after.newScroll,
       starterOpen: !!closeCurrent.snapshot.starterOpen,
       noOverflow: !closeCurrent.snapshot.overflowX
+    },
+    localClearReplay: {
+      newSession: !!clearReplay.session,
+      markerVisibleBefore: !!clearReplay.beforeClear.bodyHasFinalClearReplay,
+      ctrlLInput: hasSent(clearReplay.tracker, 'input', item => item.data === '\x0c'),
+      markerHiddenAfterClear: !clearReplay.afterClear.bodyHasFinalClearReplay,
+      reloadSameSession: clearReplay.reloadReady &&
+        String(clearReplay.reloadReady.sessionId) === String(clearReplay.session) &&
+        clearReplay.reloadReady.isReconnect === true,
+      markerStaysHiddenAfterReload: !clearReplay.afterReload.bodyHasFinalClearReplay,
+      noOverflow: !clearReplay.afterClear.overflowX && !clearReplay.afterReload.overflowX
     },
     localMobileLandscape844: {
       newSession: !!landscape.initialSession,
@@ -1378,6 +1423,7 @@ async function main() {
     report.flows.localMobile320 = await localMobileFlow(browser, state);
     report.flows.localMultiViewer = await localMultiViewerFlow(browser, state);
     report.flows.localCloseCurrent = await localCloseCurrentFlow(browser, state);
+    report.flows.localClearReplay = await localClearReplayFlow(browser, state);
     report.flows.localMobileLandscape844 = await localMobileLandscapeFlow(browser, state);
     report.flows.localMobileKeyboard390 = await localMobileKeyboardFlow(browser, state);
     report.flows.localMobileNotifications390 = await localMobileNotificationsFlow(browser, state);
@@ -1403,7 +1449,7 @@ async function main() {
     report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMultiViewer && report.flows.localCloseCurrent && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMultiViewer && report.flows.localCloseCurrent && report.flows.localClearReplay && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),

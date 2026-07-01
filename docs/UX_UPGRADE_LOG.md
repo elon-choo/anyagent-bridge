@@ -61,6 +61,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 48 | Closing the current session could carry its unsent compose draft into the replacement session and leave old local draft/scroll keys behind. | 5 | 5 | 25 | Implemented | Round 34 purges closed-session local state, clears compose before replacement reconnect, and adds final acceptance for closing the current session from the Sessions UI. |
 | 49 | Compose command-history recall could overwrite pasted multiline prompts when ArrowUp or ArrowDown was meant to move inside the textarea. | 5 | 5 | 25 | Implemented | Round 35 keeps history recall for empty/single-line compose input but leaves multiline or selected text to native textarea navigation, with final acceptance coverage. |
 | 50 | After switching sessions, command-history ArrowUp could use another session's cursor and recall the oldest command instead of the active session's latest command. | 4 | 5 | 20 | Implemented | Round 36 resets the in-memory history cursor to the active session's history end when that session becomes active, and final acceptance verifies recall after switching back. |
+| 51 | The terminal Clear key only cleared the local xterm view, so old output replayed after reload or reconnect. | 4 | 5 | 20 | Implemented | Round 37 makes Clear send Ctrl-L to the PTY as well as clearing the local display, and final acceptance verifies cleared output stays hidden after reload. |
 
 Round 1 verification:
 
@@ -419,3 +420,11 @@ Round 36 evidence:
 - Extended `test/final-ux-acceptance.js` so the desktop session-switch flow clears compose after switching back to the first session and requires ArrowUp to recall that session's latest command, while restoring the uploaded-image draft afterward.
 - Latest `npm run test:ux-final` passed with `localDesktop.draftIsolation`, `multilineHistorySafe`, `scrollPositionPreserved`, `reloadSameSession`, and `reloadScrollPositionPreserved` true; after returning to session 353, ArrowUp recalled `for i in $(seq 1 140); do echo FINAL_SCROLL_$i; done`.
 - Temporary sessions 353, 354, 355, 356, 358, 359, 360, 361, 362, and 363 were deleted; session 357 was closed through the UI; session count returned from 37 to 37.
+
+Round 37 evidence:
+
+- Focused before probe: after `echo CLEAR_REPLAY_R37`, tapping Clear removed the marker locally but sent no PTY `input` frame; a page reload reattached to the same session and replayed `CLEAR_REPLAY_R37`.
+- Changed the keybar Clear action to keep the immediate `term.clear()` behavior and also send Ctrl-L (`\\x0c`) to the PTY, so the terminal session records a clear-screen action in its replay stream.
+- Focused after probe: tapping Clear sent one Ctrl-L input frame, removed `CLEAR_REPLAY_R37`, and after reload the marker stayed hidden; page errors were 0.
+- Added `localClearReplay` to `test/final-ux-acceptance.js`; latest `npm run test:ux-final` passed `newSession`, `markerVisibleBefore`, `ctrlLInput`, `markerHiddenAfterClear`, `reloadSameSession`, `markerStaysHiddenAfterReload`, and `noOverflow`.
+- In the latest run, clear replay session 372 reloaded with `isReconnect: true`, `FINAL_CLEAR_REPLAY` stayed hidden after reload, temporary sessions 366, 367, 368, 369, 371, 372, 373, 374, 375, 376, and 377 were deleted, session 370 was closed through the UI, and session count returned from 37 to 37.
