@@ -1672,6 +1672,22 @@
     fxDialogCancel.addEventListener("click", () => closeFxDialog(null));
     fxDialog.addEventListener("click", (e) => { if (e.target === fxDialog) closeFxDialog(null); });
 
+    function fileError(msg) {
+      return askFileAction({
+        title: "File error",
+        message: msg || "File action failed.",
+        okText: "OK"
+      });
+    }
+    function askDiscard(action) {
+      return askFileAction({
+        title: "Unsaved changes",
+        message: "Discard unsaved changes" + (action ? " and " + action : "") + "?",
+        okText: "Discard",
+        danger: true
+      });
+    }
+
     async function loadTree(p) {
       try {
         const r = await aFetch("/api/explorer/tree" + (p ? "?path=" + encodeURIComponent(p) : ""));
@@ -1704,12 +1720,12 @@
     }
 
     async function openFile(p) {
-      if (fxDirty && !confirm("Discard unsaved changes?")) return;
+      if (fxDirty && !(await askDiscard("open another file"))) return;
       try {
         const r = await aFetch("/api/explorer/read?path=" + encodeURIComponent(p));
         if (r.status === 401) return onAuthErr();
         const d = await r.json().catch(() => ({}));
-        if (!r.ok || !d.success) { alert(d.error || ("Could not open file (HTTP " + r.status + ")")); return; }
+        if (!r.ok || !d.success) { await fileError(d.error || ("Could not open file (HTTP " + r.status + ").")); return; }
         fxFile = d.path; fxDirty = false;
         fxFname.textContent = d.name; fxFname.classList.remove("dirty");
         fxTa.value = d.content; fxOpenedContent = d.content; fxEditbar.style.display = ""; fxEmpty.style.display = "none";
@@ -1717,7 +1733,7 @@
         fxModes.style.display = md ? "" : "none";
         setMode(md ? fxMode : "edit");
         loadTree(fxCwd);
-      } catch (e) { alert("Could not open file — network error."); }
+      } catch (e) { await fileError("Could not open file — network error."); }
     }
 
     function setMode(m) {
@@ -1779,16 +1795,23 @@
             const cur = await aFetch("/api/explorer/read?path=" + encodeURIComponent(fxFile));
             if (cur.ok) {
               const cd = await cur.json();
-              if (cd.success && cd.content !== fxOpenedContent && cd.content !== fxTa.value &&
-                  !confirm("This file changed on disk since you opened it (the terminal or an agent may have edited it). Overwrite with your version?")) return;
+              if (cd.success && cd.content !== fxOpenedContent && cd.content !== fxTa.value) {
+                const overwrite = await askFileAction({
+                  title: "File changed",
+                  message: "This file changed on disk since you opened it. Overwrite it with your version?",
+                  okText: "Overwrite",
+                  danger: true
+                });
+                if (!overwrite) return;
+              }
             }
           } catch (_) { /* the change-check is best-effort; proceed to save */ }
         }
         const r = await aFetch("/api/explorer/write", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: fxFile, content: fxTa.value }) });
         if (r.status === 401) return onAuthErr();
         const d = await r.json();
-        if (d.success) { fxDirty = false; fxOpenedContent = fxTa.value; fxFname.classList.remove("dirty"); flash("Saved"); } else alert(d.error || "Save failed");
-      } catch (e) { alert("Save failed"); }
+        if (d.success) { fxDirty = false; fxOpenedContent = fxTa.value; fxFname.classList.remove("dirty"); flash("Saved"); } else await fileError(d.error || "Save failed");
+      } catch (e) { await fileError("Save failed"); }
     }
     function flash(msg) { const s = $("fxSave"); const o = s.dataset.o || s.textContent; s.dataset.o = o; s.textContent = "✓ " + msg; clearTimeout(flashT); flashT = setTimeout(() => { s.textContent = o; }, 1200); }
 
@@ -1805,7 +1828,7 @@
       if (!name) return;
       const p = fxCwd.replace(/\/$/, "") + "/" + name;
       const r = await aFetch("/api/file", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: p, content: "" }) });
-      const d = await r.json(); if (d.success) { await loadTree(fxCwd); openFile(p); } else alert(d.error || "Could not create file");
+      const d = await r.json(); if (d.success) { await loadTree(fxCwd); openFile(p); } else await fileError(d.error || "Could not create file");
     }
     async function newFolder() {
       if (!fxCwd) return;
@@ -1820,7 +1843,7 @@
       if (!name) return;
       const p = fxCwd.replace(/\/$/, "") + "/" + name;
       const r = await aFetch("/api/folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: p }) });
-      const d = await r.json(); if (d.success) loadTree(fxCwd); else alert(d.error || "Could not create folder");
+      const d = await r.json(); if (d.success) loadTree(fxCwd); else await fileError(d.error || "Could not create folder");
     }
     async function renameItem(it) {
       const nn = await askFileAction({
@@ -1834,7 +1857,7 @@
       if (!nn || nn === it.name) return;
       const np = it.path.slice(0, it.path.length - it.name.length) + nn;
       const r = await aFetch("/api/explorer/rename", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ oldPath: it.path, newPath: np }) });
-      const d = await r.json(); if (d.success) { if (fxFile === it.path) { fxFile = np; fxFname.textContent = nn; } loadTree(fxCwd); } else alert(d.error || "Rename failed");
+      const d = await r.json(); if (d.success) { if (fxFile === it.path) { fxFile = np; fxFname.textContent = nn; } loadTree(fxCwd); } else await fileError(d.error || "Rename failed");
     }
     async function deleteItem(it) {
       const ok = await askFileAction({
@@ -1846,7 +1869,7 @@
       if (!ok) return;
       const r = await aFetch("/api/file?path=" + encodeURIComponent(it.path), { method: "DELETE" });
       const d = await r.json();
-      if (d.success) { if (fxFile === it.path) { fxFile = null; fxEditbar.style.display = "none"; fxTa.style.display = "none"; fxPrev.style.display = "none"; fxEmpty.style.display = ""; } loadTree(fxCwd); } else alert(d.error || "Delete failed");
+      if (d.success) { if (fxFile === it.path) { fxFile = null; fxEditbar.style.display = "none"; fxTa.style.display = "none"; fxPrev.style.display = "none"; fxEmpty.style.display = ""; } loadTree(fxCwd); } else await fileError(d.error || "Delete failed");
     }
     function download() {
       if (!fxFile) return; const blob = new Blob([fxTa.value], { type: "text/plain;charset=utf-8" });
@@ -1854,7 +1877,7 @@
     }
 
     function openFiles() { fileExp.classList.add("open"); const start = (projectSel && projectSel.value) || null; loadTree(start || null); }
-    function closeFiles(force) { if (!force && fxDirty && !confirm("Discard unsaved changes?")) return; fileExp.classList.remove("open"); }
+    async function closeFiles(force) { if (!force && fxDirty && !(await askDiscard("close Files"))) return; fileExp.classList.remove("open"); }
 
     $("filesBtn").addEventListener("click", openFiles);
     $("fxClose").addEventListener("click", () => closeFiles(false));

@@ -39,6 +39,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 26 | Compose had no local command history recall after sending. | 3 | 5 | 15 | Implemented | Round 4 adds in-memory per-session recall with ArrowUp/ArrowDown; nothing is persisted to storage. |
 | 27 | Session rename/close used native `prompt`/`confirm` dialogs and tiny 18-20px row actions on mobile. | 4 | 5 | 20 | Implemented | Round 5 replaced them with inline rename and two-step close controls; row action buttons are 44px+ on mobile. |
 | 28 | Markdown Preview mode was hidden on mobile by the small-screen file explorer CSS. | 3 | 5 | 15 | Implemented | Round 10 adds a mobile preview mode that hides the tree and shows the preview pane full-width. |
+| 29 | File editor still used native dialogs for dirty-file close/switch, overwrite after a file changed on disk, and file errors. | 4 | 5 | 20 | Implemented | Round 11 routes dirty/discard, overwrite, and file-error states through the in-app file action sheet; native dialogs 0 in focused test. |
 
 Round 1 verification:
 
@@ -170,3 +171,14 @@ Round 10 evidence:
 - Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
 - Test cleanup removed temp sessions 119 and 120 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round10/full/`.
+
+Round 11 evidence:
+
+- Before focused Files probe: dirty close, dirty switch, and overwrite after a file changed on disk each opened a native `confirm`; the file action sheet stayed closed.
+- Replaced dirty-file discard prompts, overwrite after a file changed on disk, and file-operation errors with the existing in-app file action sheet.
+- Focused after probe: native dialogs 0, page errors 0, close/switch/conflict sheets rendered with `Discard`/`Overwrite`, cancel preserved the dirty file, confirm switched files, overwrite saved `alpha user version`, and final discard closed Files.
+- Focused cleanup returned the bridge to 37 sessions.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, project-scoped agent start, manual `sendToAgent`, image attach, Tab special key, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, and dirty-file sheets all passed.
+- Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
+- Test cleanup removed temp sessions 121 and 122 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round11/full/`.
