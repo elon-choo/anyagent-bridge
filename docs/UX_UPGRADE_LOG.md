@@ -49,6 +49,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 36 | Final automated acceptance lived only under `/tmp`, making future revalidation hard. | 4 | 5 | 20 | Implemented | Round 22 adds `test/final-ux-acceptance.js` plus `npm run test:ux-final`, covering local desktop/mobile, optional funnel, optional landing, modal focus, PWA endpoints, and cleanup. |
 | 37 | The remaining physical-phone smoke could start with stale tunnel/API/PWA state and waste the tester's first minutes. | 3 | 5 | 15 | Implemented | Round 23 adds `test/phone-smoke-preflight.js` plus `npm run test:phone-preflight`, producing a redacted readiness report before the real phone run. |
 | 38 | The tracked final acceptance still did not deeply exercise the mobile Files editor/Markdown preview path required by the phone smoke. | 4 | 5 | 20 | Implemented | Round 24 adds a 390px mobile Files preview flow to `test/final-ux-acceptance.js` and raises mobile Files editbar/mode controls to touch-safe dimensions. |
+| 39 | The tracked final acceptance still only implied Sessions coverage through modal accessibility, leaving new-session and switch-back behavior easy to regress. | 4 | 5 | 20 | Implemented | Round 25 adds a desktop Sessions flow to `test/final-ux-acceptance.js`: create a second session from the modal, run a command there, switch back to the first session, verify original output, and clean all temp sessions. |
 
 Round 1 verification:
 
@@ -313,3 +314,10 @@ Round 24 evidence:
 - The runner now creates a temporary project and Markdown fixture under ignored `uploads/`, opens it through the real Files UI, switches to Preview, verifies no horizontal overflow, verifies Markdown preview text is visible, verifies injected script markup does not execute, and cleans up the project and fixture.
 - Fixed the mobile Files editbar touch targets: mode buttons and icon-only Save/download/rename/delete controls now measure 44px+ in the acceptance report.
 - Latest acceptance report: `/tmp/anyagent-bridge-final-audit/final-ux-acceptance-report.json`; screenshot: `/tmp/anyagent-bridge-final-audit/local-mobile-files-preview.png`.
+
+Round 25 evidence:
+
+- Added a desktop Sessions workflow to `test/final-ux-acceptance.js`.
+- The runner now opens Sessions, verifies the current row, creates a new session from `New session`, observes a different `ready` session id, sends `echo FINAL_SWITCH_SECOND`, opens Sessions again, switches back to the original session row, and verifies `FINAL_DESKTOP` output returns.
+- Latest `npm run test:ux-final` passed with `localDesktop.sessionSwitch: true`.
+- Temporary sessions 231, 232, 233, 234, and 235 were deleted; session count returned from 37 to 37.

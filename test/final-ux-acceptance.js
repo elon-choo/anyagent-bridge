@@ -198,6 +198,20 @@ async function waitFor(page, fn, arg, label, timeout = 15000) {
   }
 }
 
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForTracker(tracker, predicate, label, timeout = 15000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const result = predicate(tracker);
+    if (result) return result;
+    await delay(100);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
 async function waitForStatus(page, text, timeout = 15000) {
   await waitFor(page, expected => {
     const el = document.querySelector('#statusText');
@@ -331,6 +345,68 @@ async function verifyModals(page) {
   return results;
 }
 
+async function openSessionsModal(page) {
+  await page.click('#sessBtn');
+  await waitFor(page, () => {
+    const el = document.querySelector('#sessModal');
+    if (!el) return false;
+    const style = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  }, null, 'sessions modal');
+}
+
+async function waitForSessionRow(page, sessionId, label) {
+  await waitFor(page, id => Array.from(document.querySelectorAll('#sxList .sx-item'))
+    .some(row => row.dataset.sessionId === String(id)), String(sessionId), label);
+}
+
+async function verifySessionSwitch(page, tracker) {
+  const firstSession = await waitForTracker(tracker, item => item.sessionIds[0], 'initial desktop session');
+  await openSessionsModal(page);
+  await waitForSessionRow(page, firstSession, 'initial session row');
+
+  const newReadyIndex = tracker.received.length;
+  await page.click('#sxNew');
+  const secondSession = await waitForTracker(tracker, item => {
+    const ready = item.received.slice(newReadyIndex).find(frame =>
+      frame.type === 'ready' &&
+      frame.sessionId &&
+      String(frame.sessionId) !== String(firstSession) &&
+      frame.isReconnect === false
+    );
+    return ready && ready.sessionId;
+  }, 'new session ready', 20000);
+  await waitForStatus(page, 'connected', 20000);
+
+  await page.fill('#composeInput', 'echo FINAL_SWITCH_SECOND');
+  await page.click('#composeSend');
+  await waitFor(page, () => document.body.innerText.includes('FINAL_SWITCH_SECOND'), null, 'second session output', 15000);
+  const secondBody = await page.evaluate(() => document.body ? document.body.innerText : '');
+
+  await openSessionsModal(page);
+  await waitForSessionRow(page, firstSession, 'switch-back session row');
+  await waitForSessionRow(page, secondSession, 'current second session row');
+
+  const backReadyIndex = tracker.received.length;
+  await page.click(`#sxList .sx-item[data-session-id="${firstSession}"]`);
+  await waitForTracker(tracker, item => item.received.slice(backReadyIndex).some(frame =>
+    frame.type === 'ready' && String(frame.sessionId) === String(firstSession)
+  ), 'switch back ready', 20000);
+  await waitForStatus(page, 'connected', 20000);
+  await waitFor(page, () => document.body.innerText.includes('FINAL_DESKTOP'), null, 'original session output after switch back', 20000);
+  const firstBody = await page.evaluate(() => document.body ? document.body.innerText : '');
+
+  return {
+    firstSession,
+    secondSession,
+    createdDifferent: String(firstSession) !== String(secondSession),
+    secondCommandVisible: secondBody.includes('FINAL_SWITCH_SECOND'),
+    switchBackReady: true,
+    originalOutputRestored: firstBody.includes('FINAL_DESKTOP')
+  };
+}
+
 function hasSent(tracker, type, predicate = () => true) {
   return tracker.sent.some(item => item.type === type && predicate(item));
 }
@@ -357,6 +433,7 @@ async function localDesktopFlow(browser, state) {
   await page.locator('#keybar .kb').filter({ hasText: /^Esc$/ }).first().click();
   await waitFor(page, () => true, null, 'event loop', 1000).catch(() => {});
 
+  const sessionSwitch = await verifySessionSwitch(page, tracker);
   const modals = await verifyModals(page);
 
   await context.setOffline(true);
@@ -368,7 +445,7 @@ async function localDesktopFlow(browser, state) {
   await page.screenshot({ path: path.join(OUT_DIR, 'local-desktop-after.png'), fullPage: true });
 
   await context.close();
-  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, modals, offline, reconnected };
+  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, sessionSwitch, modals, offline, reconnected };
 }
 
 async function localMobileFlow(browser, state) {
@@ -681,6 +758,14 @@ function buildChecks(report) {
       outputSeen: desktop.reconnected.bodyHasFinalDesktop || hasReceived(desktop.tracker, 'output', item => /FINAL_DESKTOP/.test(item.sample || '')),
       imageAttached: /uploads\/.*pixel\.png/.test(desktop.offline.composeValue || desktop.reconnected.composeValue || ''),
       escInput: hasSent(desktop.tracker, 'input', item => item.data === '\x1b'),
+      sessionSwitch: !!(desktop.sessionSwitch &&
+        desktop.sessionSwitch.firstSession &&
+        desktop.sessionSwitch.secondSession &&
+        desktop.sessionSwitch.createdDifferent &&
+        desktop.sessionSwitch.secondCommandVisible &&
+        desktop.sessionSwitch.switchBackReady &&
+        desktop.sessionSwitch.originalOutputRestored &&
+        hasSent(desktop.tracker, 'sendToAgent', item => item.text === 'echo FINAL_SWITCH_SECOND')),
       modalsAccessible: modalValues.length === 6 && modalValues.every(item =>
         item.opened.open &&
         item.opened.role === 'dialog' &&
