@@ -57,6 +57,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 44 | The tracked final acceptance did not prove the physical-smoke notification step: switching Quiet and back to Important with persistence on mobile. | 4 | 5 | 20 | Implemented | Round 30 adds a 390px mobile Notifications flow that switches Quiet, verifies it after reopening, switches Important, verifies it after reopening, and checks 44px+ mode controls. |
 | 45 | The tracked final acceptance did not prove simultaneous multi-viewer control: a second browser deep-linking to an existing session and both viewers receiving output. | 5 | 5 | 25 | Implemented | Round 31 adds a two-context multi-viewer flow: secondary opens `?session=<id>`, attaches to the same session, sends `echo FINAL_MULTIVIEW`, and both viewers see output. |
 | 46 | Reconnecting while scrolled up in terminal history jumped the user back to the top of server replayed scrollback. | 5 | 5 | 25 | Implemented | Round 32 captures the xterm viewport before unintended reconnects, restores it after same-session replay, and adds final acceptance that preserves `scrollTop` and visible rows across offline/online. |
+| 47 | Reloading or restarting the app after scrolling terminal history did not restore the same visible terminal position. | 5 | 5 | 25 | Implemented | Round 33 stores terminal viewport per session, restores it after same-session reload replay, and adds final acceptance that reload preserves `scrollTop`, visible rows, and the same session id. |
 
 Round 1 verification:
 
@@ -382,3 +383,11 @@ Round 32 evidence:
 - Extended `test/final-ux-acceptance.js` so the local desktop flow generates long scrollback, scrolls to a mid-history viewport, forces offline/online, and fails unless `scrollTop` and the first visible row are preserved.
 - Latest `npm run test:ux-final` passed with `localDesktop.scrollPositionPreserved: true`; the scroll snapshot stayed `scrollTop: 548` before and after reconnect, with top row `FINAL_SCROLL_33` before and after.
 - Temporary sessions 298, 299, 300, 301, 302, 303, 304, 305, and 306 were deleted; session count returned from 37 to 37.
+
+Round 33 evidence:
+
+- Focused before probe: after generating 150 terminal lines and scrolling up, a full page reload reattached to the same session but moved from `scrollTop: 574` / `RELOAD_SCROLL_37` to `scrollTop: 1605` / `RELOAD_SCROLL_106`; screenshots were written under `/tmp/anyagent-bridge-ux-round33-before/`.
+- Added per-session terminal viewport persistence in localStorage and reload restore from that stored position after same-session replay. Stored data is only numeric scroll position metadata keyed by session id.
+- Extended `test/final-ux-acceptance.js` so local desktop reload must return a `ready` frame for the same session with `isReconnect: true` and preserve the same terminal `scrollTop` plus first visible row.
+- Latest `npm run test:ux-final` passed with `localDesktop.reloadSameSession` and `reloadScrollPositionPreserved` true; session 309 reattached after reload, and reload stayed at `scrollTop: 548` with top row `FINAL_SCROLL_33`.
+- Temporary sessions 309, 310, 311, 312, 313, 314, 315, 316, and 317 were deleted; session count returned from 37 to 37.

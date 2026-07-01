@@ -834,6 +834,7 @@
     lastSession: "aab.lastSessionId",
     selectedProject: "aab.selectedProjectPath",
     composeDraft: "aab.composeDraft.",
+    terminalScroll: "aab.terminalScroll.",
     pushMode: "aab.pushMode"
   };
   function storageGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
@@ -1050,6 +1051,8 @@
     fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open($("terminal"));
+    const viewport = terminalViewport();
+    if (viewport) viewport.addEventListener("scroll", saveTerminalScroll, { passive: true });
     safeFit();
 
     // keystrokes -> server
@@ -1071,6 +1074,32 @@
     return document.querySelector("#terminal .xterm-viewport");
   }
 
+  function terminalScrollKey(id) {
+    return STORAGE.terminalScroll + (id || "pending");
+  }
+
+  function saveTerminalScroll() {
+    const viewport = terminalViewport();
+    if (!viewport || !currentSessionId) return;
+    storageSet(terminalScrollKey(currentSessionId), JSON.stringify({
+      scrollTop: viewport.scrollTop,
+      maxScroll: Math.max(0, viewport.scrollHeight - viewport.clientHeight),
+      at: Date.now()
+    }));
+  }
+
+  function loadTerminalScrollRestore() {
+    if (pendingTerminalScrollRestore || !currentSessionId) return;
+    let stored = null;
+    try { stored = JSON.parse(storageGet(terminalScrollKey(currentSessionId)) || "null"); } catch (_) { stored = null; }
+    if (!stored || typeof stored.scrollTop !== "number") return;
+    pendingTerminalScrollRestore = {
+      sessionId: String(currentSessionId),
+      scrollTop: Math.max(0, stored.scrollTop),
+      maxScroll: Math.max(0, stored.maxScroll || 0)
+    };
+  }
+
   function captureTerminalScroll() {
     const viewport = terminalViewport();
     if (!viewport || !currentSessionId) return;
@@ -1079,6 +1108,7 @@
       scrollTop: viewport.scrollTop,
       maxScroll: Math.max(0, viewport.scrollHeight - viewport.clientHeight)
     };
+    saveTerminalScroll();
   }
 
   function restoreTerminalScrollNow() {
@@ -1094,6 +1124,7 @@
   }
 
   function restoreTerminalScrollSoon() {
+    loadTerminalScrollRestore();
     requestAnimationFrame(() => requestAnimationFrame(restoreTerminalScrollNow));
     setTimeout(restoreTerminalScrollNow, 80);
     setTimeout(restoreTerminalScrollNow, 220);

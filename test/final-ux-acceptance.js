@@ -610,10 +610,37 @@ async function localDesktopFlow(browser, state) {
   await page.waitForTimeout(500);
   const scrollAfterReconnect = await terminalScrollSnapshot(page);
   const reconnected = await stateSnapshot(page);
+
+  const reloadReadyIndex = tracker.received.length;
+  const scrollBeforeReload = await terminalScrollSnapshot(page);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#terminal .xterm', { timeout: 20000 });
+  await waitForStatus(page, 'connected', 20000);
+  const reloadReady = await waitForTracker(tracker, item => item.received.slice(reloadReadyIndex).find(frame =>
+    frame.type === 'ready' && String(frame.sessionId) === String(tracker.sessionIds[0]) && frame.isReconnect === true
+  ), 'desktop reload reconnect', 20000);
+  await page.waitForTimeout(1000);
+  const scrollAfterReload = await terminalScrollSnapshot(page);
+  const afterReload = await stateSnapshot(page);
   await page.screenshot({ path: path.join(OUT_DIR, 'local-desktop-after.png'), fullPage: true });
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-desktop-after-reload.png'), fullPage: true });
 
   await context.close();
-  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, sessionSwitch, modals, scrollBeforeReconnect, offline, scrollAfterReconnect, reconnected };
+  return {
+    initialSession: tracker.sessionIds[0] || null,
+    tracker,
+    initial,
+    sessionSwitch,
+    modals,
+    scrollBeforeReconnect,
+    offline,
+    scrollAfterReconnect,
+    reconnected,
+    reloadReady,
+    scrollBeforeReload,
+    scrollAfterReload,
+    afterReload
+  };
 }
 
 async function localMobileFlow(browser, state) {
@@ -1093,7 +1120,16 @@ function buildChecks(report) {
         desktop.scrollBeforeReconnect.scrollHeight > desktop.scrollBeforeReconnect.clientHeight &&
         desktop.scrollBeforeReconnect.scrollTop > 0 &&
         Math.abs(desktop.scrollAfterReconnect.scrollTop - desktop.scrollBeforeReconnect.scrollTop) <= 30 &&
-        desktop.scrollAfterReconnect.topRows[0] === desktop.scrollBeforeReconnect.topRows[0]
+        desktop.scrollAfterReconnect.topRows[0] === desktop.scrollBeforeReconnect.topRows[0],
+      reloadSameSession: desktop.reloadReady &&
+        String(desktop.reloadReady.sessionId) === String(desktop.initialSession) &&
+        desktop.reloadReady.isReconnect === true,
+      reloadScrollPositionPreserved: desktop.scrollBeforeReload.available &&
+        desktop.scrollAfterReload.available &&
+        desktop.scrollBeforeReload.scrollTop > 0 &&
+        Math.abs(desktop.scrollAfterReload.scrollTop - desktop.scrollBeforeReload.scrollTop) <= 30 &&
+        desktop.scrollAfterReload.topRows[0] === desktop.scrollBeforeReload.topRows[0] &&
+        !desktop.afterReload.overflowX
     },
     localMobile320: {
       newSession: !!mobile.initialSession,
