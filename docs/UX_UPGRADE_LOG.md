@@ -23,7 +23,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 10 | Switching sessions could carry unsent text into the wrong session. | 4 | 4 | 16 | Implemented | Draft is saved before switch/new session and restored per session id. |
 | 11 | The UI reports `connected` before the server `ready` frame. | 3 | 4 | 12 | Implemented | Round 3 changed socket-open status to `attaching...`; `connected` is set only after server `ready`. |
 | 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Partially implemented | Round 4 added safe one-tap command chips (`pwd`, `ls`, `git status`, `whoami`) above the mobile input dock. |
-| 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Backlog | After mobile screenshot shows `Connect` partially off-screen. |
+| 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Implemented | Round 6 wraps the mobile toolbar into ordered rows so all primary controls are visible without horizontal scrolling. |
 | 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Backlog | Before test observed 38 session rows. |
 | 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Backlog | After 320 screenshot shows Claude trust prompt filling terminal. |
 | 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Backlog | After report has expected `.env.local` 404. |
@@ -105,3 +105,16 @@ Round 5 evidence:
 - Mobile session row action audit: 0 controls under 44px and 0 missing `aria-label`s.
 - Test cleanup returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round5/full/`.
+
+Round 6 evidence:
+
+- Before focused toolbar probe: at 320px only `Local` was fully visible; Start, Connect, Projects, Secrets, Files, Notifications, Sessions, keyboard toggle, and status were off-screen in a 1106px horizontal toolbar.
+- Changed the mobile toolbar from one horizontal scroller to wrapped ordered rows, keeping title/exposure/status first and all app actions visible without swiping.
+- Shortened the Connect button label to `📱 Connect` while preserving the full title text.
+- Focused after probe: 320px and 390px toolbar scroll width equals client width, overflow is visible, off-screen controls: 0, partial controls: 0, small targets: 0, page errors: 0.
+- Full desktop/mobile flow: project-scoped agent start, quick/manual send frames, image attach, special key, session switch, forced reconnect, Projects/Secrets/Files/Connect/Sessions modals all passed.
+- Full flow page errors: desktop 0, mobile 0; mobile native dialogs: 0.
+- Full 320/390/mobile user-control touch-target audit: 0 audited controls under 44px.
+- Full flow toolbar hidden controls: 0 at 320px, 390px, and mobile; with a selected project the toolbar measured 261px at 320px and 211px at 390px/mobile.
+- Test cleanup returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round6/full/`.

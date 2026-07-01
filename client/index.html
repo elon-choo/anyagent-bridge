@@ -120,29 +120,47 @@
 
   @media (max-width: 640px) {
     #bar {
-      flex-wrap: nowrap;
-      overflow-x: auto;
+      flex-wrap: wrap;
+      overflow-x: visible;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
       gap: 6px;
       padding: 8px;
+      align-content: flex-start;
     }
     #bar::-webkit-scrollbar { display: none; }
-    #bar .title { width: auto; margin-bottom: 0; flex: 0 0 auto; }
+    #bar .title {
+      order: 1;
+      width: auto; margin-bottom: 0; flex: 1 1 auto; min-height: 44px;
+      display: inline-flex; align-items: center;
+    }
+    #bar .spacer { display: none; }
     #bar select, #bar button {
-      flex: 0 0 auto;
+      flex: 0 1 auto;
       min-width: 44px;
       min-height: 44px;
       font-size: 12px;
       padding: 8px 10px;
     }
+    #agentSel { order: 10; flex: 1 1 115px; max-width: 155px; }
+    #startBtn { order: 11; }
+    #connectBtn { order: 12; }
+    #projectSel { order: 13; flex: 1 1 150px; max-width: 100%; }
+    #projBtn { order: 20; }
+    #secBtn { order: 21; }
+    #filesBtn { order: 22; }
+    #notifBtn { order: 23; }
+    #sessBtn { order: 24; }
+    #dockToggle { order: 25; }
     #status {
+      order: 3;
       margin-left: 0;
       flex: 0 0 auto;
       min-height: 44px;
       padding: 0 8px;
     }
     #exposureBadge {
+      order: 2;
       flex: 0 0 auto;
       min-height: 44px;
       padding: 0 12px;
@@ -437,7 +455,7 @@
     <span id="exposureBadge" class="unknown" title=""></span>
     <select id="agentSel" title="Agent"></select>
     <button id="startBtn">Start</button>
-    <button id="connectBtn" title="Open on a phone or another device">📱 Connect a device</button>
+    <button id="connectBtn" title="Open on a phone or another device">📱 Connect</button>
     <select id="projectSel" title="Project" style="display:none"></select>
     <button id="projBtn" title="Add or manage projects by browsing folders">📁 Projects</button>
     <button id="secBtn" title="Save API keys / tokens into a project's .env.local">🔑 Secrets</button>
