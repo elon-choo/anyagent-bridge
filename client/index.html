@@ -364,15 +364,36 @@
   #sessModal .sx-item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 7px; cursor: pointer; }
   #sessModal .sx-item:hover { background: #0d1117; }
   #sessModal .sx-item.cur { border-color: var(--accent); background: rgba(47,129,247,.10); }
+  #sessModal .sx-item.editing,
+  #sessModal .sx-item.confirming { align-items: flex-start; cursor: default; }
   #sessModal .sx-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; background: var(--muted); }
+  #sessModal .sx-item.editing .sx-dot,
+  #sessModal .sx-item.confirming .sx-dot { margin-top: 13px; }
   #sessModal .sx-meta { flex: 1; min-width: 0; }
   #sessModal .sx-nm { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #sessModal .sx-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #sessModal .sx-cur-badge { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 6px; }
-  #sessModal .sx-act { display: flex; gap: 3px; flex: 0 0 auto; }
-  #sessModal .sx-act button { background: transparent; border: none; cursor: pointer; font-size: 13px; padding: 2px 4px; color: var(--muted); }
+  #sessModal .sx-cur-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 24px; padding: 0 7px; font-size: 10px; line-height: 1; white-space: nowrap;
+    color: var(--accent); border: 1px solid var(--accent); border-radius: 999px;
+  }
+  #sessModal .sx-act { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+  #sessModal .sx-act button {
+    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; border-radius: 7px; cursor: pointer;
+    font-size: 13px; padding: 0; color: var(--muted);
+  }
   #sessModal .sx-act button:hover { color: var(--fg); }
   #sessModal .sx-act button.kill:hover { color: var(--red); }
+  #sessModal .sx-edit,
+  #sessModal .sx-confirm { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  #sessModal .sx-edit input { flex: 1 1 150px; min-width: 0; }
+  #sessModal .sx-confirm-text { flex: 1 1 150px; min-width: 0; font-size: 12.5px; line-height: 1.4; color: var(--fg); }
+  #sessModal .sx-confirm-text span { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  #sessModal .sx-inline-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+  #sessModal .sx-mini { min-height: 32px; padding: 6px 10px; font-size: 12px; }
+  #sessModal .sx-mini.danger { border-color: rgba(248,81,73,.55); color: #ffb4ae; }
+  #sessModal .sx-mini.danger:hover { background: rgba(248,81,73,.12); border-color: var(--red); color: #ffc2bd; }
   #sessModal .sx-empty { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
   #sessModal .sx-new { width: 100%; }
   @media (max-width: 640px) {
@@ -392,6 +413,12 @@
     #composebar { padding: 8px; }
     #composebar .attach, #composeSend { min-width: 44px; min-height: 44px; }
     #composeInput { min-height: 44px; }
+    #sessModal .sx-item { padding: 8px; gap: 8px; }
+    #sessModal .sx-act button,
+    #sessModal .sx-mini { min-width: 44px; min-height: 44px; }
+    #sessModal .sx-edit,
+    #sessModal .sx-confirm { gap: 8px; }
+    #sessModal .sx-inline-actions { gap: 8px; }
     #onboard .ob-close,
     #projModal .pm-close,
     #secModal .pm-close,
@@ -1843,24 +1870,31 @@
       for (const s of list) {
         const li = document.createElement("li");
         li.className = "sx-item" + (s.sessionId === currentSessionId ? " cur" : "");
+        li.dataset.sessionId = String(s.sessionId);
         const dot = document.createElement("span"); dot.className = "sx-dot";
         // only accept a safe color literal (hex / rgb / keyword) — never url(...) etc.
         if (s.color && /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|rgba?\([\d.,\s%]+\))$/.test(s.color)) dot.style.background = s.color;
+        const displayName = s.displayName || s.projectName || ("Session " + s.sessionId);
         const meta = document.createElement("div"); meta.className = "sx-meta";
         const nm = document.createElement("div"); nm.className = "sx-nm";
-        nm.textContent = s.displayName || s.projectName || ("Session " + s.sessionId);
+        nm.textContent = displayName;
         const sub = document.createElement("div"); sub.className = "sx-sub";
         sub.textContent = (s.projectPath || "~") + (s.agentName ? "  ·  " + s.agentName : "");
         meta.appendChild(nm); meta.appendChild(sub);
         const act = document.createElement("div"); act.className = "sx-act";
         if (s.sessionId === currentSessionId) { const bg = document.createElement("span"); bg.className = "sx-cur-badge"; bg.textContent = "current"; act.appendChild(bg); }
-        const rn = document.createElement("button"); rn.textContent = "✏"; rn.title = "Rename";
-        rn.addEventListener("click", (e) => { e.stopPropagation(); renameSession(s); });
+        const rn = document.createElement("button"); rn.textContent = "✏️"; rn.title = "Rename";
+        rn.type = "button"; rn.setAttribute("aria-label", "Rename " + displayName);
+        rn.addEventListener("click", (e) => { e.stopPropagation(); showRenameSession(s, li, meta, act, displayName); });
         const kl = document.createElement("button"); kl.className = "kill"; kl.textContent = "✕"; kl.title = "Close";
-        kl.addEventListener("click", (e) => { e.stopPropagation(); killSession(s); });
+        kl.type = "button"; kl.setAttribute("aria-label", "Close " + displayName);
+        kl.addEventListener("click", (e) => { e.stopPropagation(); showCloseSession(s, li, meta, act, displayName); });
         act.appendChild(rn); act.appendChild(kl);
         li.appendChild(dot); li.appendChild(meta); li.appendChild(act);
-        li.addEventListener("click", () => switchSession(s.sessionId));
+        li.addEventListener("click", () => {
+          if (li.classList.contains("editing") || li.classList.contains("confirming")) return;
+          switchSession(s.sessionId);
+        });
         sxList.appendChild(li);
       }
     }
@@ -1870,19 +1904,93 @@
       targetSessionId = id; closeSess(); hardReconnect();
     }
     function newSession() { prepareComposeForSessionChange(); targetSessionId = null; closeSess(); hardReconnect(); }
-    async function renameSession(s) {
-      const nn = prompt("Rename session:", s.displayName || ("Session " + s.sessionId));
-      if (nn == null) return;
-      try {
-        await fetch("/api/sessions/" + s.sessionId + "/name", { method: "PATCH", credentials: "include",
-          headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: "Bearer " + token } : {}),
-          body: JSON.stringify({ name: nn }) });
-      } catch (_) {}
-      loadSessions();
+    function resetSessionRow(li, meta, act, panel, mode) {
+      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+      li.classList.remove(mode);
+      meta.style.display = "";
+      act.style.display = "";
+    }
+    function showRenameSession(s, li, meta, act, displayName) {
+      li.classList.remove("confirming");
+      const oldPanel = li.querySelector(".sx-edit,.sx-confirm");
+      if (oldPanel) oldPanel.remove();
+      li.classList.add("editing");
+      meta.style.display = "none";
+      act.style.display = "none";
+      const form = document.createElement("form");
+      form.className = "sx-edit";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = displayName;
+      input.setAttribute("aria-label", "Session name");
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      const actions = document.createElement("div");
+      actions.className = "sx-inline-actions";
+      const save = document.createElement("button");
+      save.type = "submit";
+      save.className = "primary sx-mini";
+      save.textContent = "Save";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "sx-mini";
+      cancel.textContent = "Cancel";
+      actions.appendChild(save); actions.appendChild(cancel);
+      form.appendChild(input); form.appendChild(actions);
+      form.addEventListener("click", (e) => e.stopPropagation());
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const nn = input.value.trim();
+        try {
+          const r = await fetch("/api/sessions/" + s.sessionId + "/name", { method: "PATCH", credentials: "include",
+            headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: "Bearer " + token } : {}),
+            body: JSON.stringify({ name: nn }) });
+          if (!r.ok) throw new Error("rename failed");
+          loadSessions();
+        } catch (_) { toast("Rename failed", true); }
+      });
+      cancel.addEventListener("click", () => resetSessionRow(li, meta, act, form, "editing"));
+      li.appendChild(form);
+      setTimeout(() => { input.focus(); input.select(); }, 0);
+    }
+    function showCloseSession(s, li, meta, act, displayName) {
+      li.classList.remove("editing");
+      const oldPanel = li.querySelector(".sx-edit,.sx-confirm");
+      if (oldPanel) oldPanel.remove();
+      li.classList.add("confirming");
+      meta.style.display = "none";
+      act.style.display = "none";
+      const panel = document.createElement("div");
+      panel.className = "sx-confirm";
+      const text = document.createElement("div");
+      text.className = "sx-confirm-text";
+      text.textContent = "Close " + displayName + "?";
+      const detail = document.createElement("span");
+      detail.textContent = "Anything running in this terminal will be terminated.";
+      text.appendChild(detail);
+      const actions = document.createElement("div");
+      actions.className = "sx-inline-actions";
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "sx-mini danger";
+      close.textContent = "Close";
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "sx-mini";
+      keep.textContent = "Keep";
+      actions.appendChild(close); actions.appendChild(keep);
+      panel.appendChild(text); panel.appendChild(actions);
+      panel.addEventListener("click", (e) => e.stopPropagation());
+      close.addEventListener("click", () => killSession(s));
+      keep.addEventListener("click", () => resetSessionRow(li, meta, act, panel, "confirming"));
+      li.appendChild(panel);
+      setTimeout(() => close.focus(), 0);
     }
     async function killSession(s) {
-      if (!confirm("Close this session? Anything running in it will be terminated.")) return;
-      try { await fetch("/api/sessions/" + s.sessionId, { method: "DELETE", credentials: "include", headers: token ? { Authorization: "Bearer " + token } : {} }); } catch (_) {}
+      try {
+        const r = await fetch("/api/sessions/" + s.sessionId, { method: "DELETE", credentials: "include", headers: token ? { Authorization: "Bearer " + token } : {} });
+        if (!r.ok) throw new Error("delete failed");
+      } catch (_) { toast("Close failed", true); return; }
       if (s.sessionId === currentSessionId) { targetSessionId = null; hardReconnect(); }
       loadSessions();
     }

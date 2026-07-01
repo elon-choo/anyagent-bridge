@@ -37,6 +37,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 24 | Reduced-motion and animation preferences are not explicitly handled. | 2 | 4 | 8 | Backlog | CSS inspection. |
 | 25 | There were no one-tap common command snippets for phone use. | 4 | 5 | 20 | Implemented | Round 4 quick command chips send via existing `sendToAgent`; all chips are 44px+ on mobile. |
 | 26 | Compose had no local command history recall after sending. | 3 | 5 | 15 | Implemented | Round 4 adds in-memory per-session recall with ArrowUp/ArrowDown; nothing is persisted to storage. |
+| 27 | Session rename/close used native `prompt`/`confirm` dialogs and tiny 18-20px row actions on mobile. | 4 | 5 | 20 | Implemented | Round 5 replaced them with inline rename and two-step close controls; row action buttons are 44px+ on mobile. |
 
 Round 1 verification:
 
@@ -90,3 +91,17 @@ Round 4 evidence:
 - Mobile/320/390 touch-target audit: 0 audited controls under 44px.
 - Test cleanup returned the bridge to 37 sessions and 0 projects.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round4/full/`.
+
+Round 5 evidence:
+
+- Before focused sessions probe: Sessions had 38 rows; rename opened a native `prompt`, close opened a native `confirm`, and row action buttons measured 18-20px with no `aria-label`.
+- Replaced session rename with an inline input and Save/Cancel buttons inside the row.
+- Replaced session close with an inline two-step Close/Keep confirmation inside the row, so tapping the `x` alone does not terminate a terminal.
+- Session row action buttons now carry `aria-label`s and mobile touch targets are 44px+.
+- Focused after probe: zero native dialogs, zero page errors, inline rename saved `AAB R5`, Keep preserved the row, second-step Close deleted only the temp session, and current badge measured 51x24.
+- Full desktop/mobile flow: project-scoped agent start, quick/manual send frames, image attach, special key, session switch, forced reconnect, Projects/Secrets/Files/Connect/Sessions modals all passed.
+- Full flow page errors: desktop 0, mobile 0; mobile native dialogs: 0.
+- Mobile/320/390 user-control touch-target audit: 0 audited controls under 44px.
+- Mobile session row action audit: 0 controls under 44px and 0 missing `aria-label`s.
+- Test cleanup returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round5/full/`.
