@@ -16,6 +16,7 @@ Latest automated evidence:
 - PWA/installability endpoints: `/tmp/anyagent-bridge-final-audit/pwa-endpoints-report.json`
 - Production landing audit: `/tmp/anyagent-bridge-ux-round19/landing-production/report.json`
 - Full finding/evidence table: `docs/UX_UPGRADE_LOG.md`
+- Physical-phone report template: `docs/PHONE_SMOKE_REPORT_TEMPLATE.md`
 
 ## Requirement Audit
 
@@ -26,7 +27,7 @@ Latest automated evidence:
 | Prefer client-only, avoid server churn | UX rounds changed `client/`, `public/`, `.gitignore`, and docs; final `git diff --stat -- server/` is empty. | Verified |
 | Secret safety | Patch-level secret scans are clean; `.data/`, `.env`, `.env.local`, `.vercel/`, `.npmrc`, and generated local state remain ignored. | Verified |
 | No package release performed | No package release command was run. | Verified |
-| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 34 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, and final auditability. | Verified |
+| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 35 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, and physical-phone evidence capture. | Verified |
 | Implement prioritized improvements in small rounds | Rounds 1-20 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
 | Beginners can send the first mobile command within 3 taps | Final local 320px and funnel 390px checks show fresh starter visible, `pwd` sends with one tap, output appears, and starter closes. | Verified |
 | 320-1440px layouts do not break | Final acceptance covers local app at 1440 and 320, funnel at 390, landing at 1440/390/320; horizontal overflow 0. | Verified |
@@ -39,12 +40,12 @@ Latest automated evidence:
 | Accessibility: modals named, focus contained/restored | Final modal report verifies Connect, Projects, Secrets, Files, Notifications, and Sessions have dialog semantics, focus moves inside, and focus restores to opener. | Verified |
 | Notification noise controls exist | Round 16 and final landing evidence cover All, Important, Quiet, Paused; service worker filtering was verified in Round 16. | Verified |
 | Landing reflects new features | `https://anyagent-bridge.vercel.app` is deployed from tracked `public/`, mentions starter, Quiet, launch assist, and Node 18+, and passes production Playwright audit. | Verified |
-| Final report and smoke checklist exist | This file provides the final audit and physical-phone smoke checklist. | Verified |
+| Final report and smoke checklist exist | This file provides the final audit and physical-phone smoke checklist; `docs/PHONE_SMOKE_REPORT_TEMPLATE.md` provides the fillable evidence artifact. | Verified |
 | 30-minute physical-phone smoke | Requires a real phone in the user's hands. Automated mobile emulation and Tailscale funnel checks passed, but a physical phone was not operated by Codex. | Pending human verification |
 
 ## Finding Status Summary
 
-All 34 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
+All 35 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
 
 | Range | Area | Status |
 |---|---|---|
@@ -55,7 +56,7 @@ All 34 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Ver
 | 16-19 | Missing env noise, CDN fallbacks, PWA icon availability, offline state | Implemented / Verified OK |
 | 20-23 | File dialogs, notification modes, exposure badge, Markdown fallback | Implemented |
 | 24-28 | Reduced motion, quick commands, command history, session row actions, mobile preview | Implemented |
-| 29-34 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit | Implemented |
+| 29-35 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template | Implemented |
 
 ## Final Automated Acceptance
 
@@ -108,7 +109,7 @@ Use a real phone against `https://anyagent-bridge.tail8e6e6f.ts.net`. Do not pas
 19. Review text fit at 320-ish phone width and normal phone width. Expected: no clipped button labels or overlapping controls.
 20. End by closing only temporary sessions created during the smoke.
 
-Record:
+Record results in `docs/PHONE_SMOKE_REPORT_TEMPLATE.md`:
 
 - Phone model and OS version.
 - Browser used.

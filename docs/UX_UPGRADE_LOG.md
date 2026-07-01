@@ -45,6 +45,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 32 | Modal focus could still escape with Tab, and closing overlays did not restore focus to the opener. | 3 | 5 | 15 | Implemented | Round 15 adds shared modal focus containment and opener restoration for Connect, Projects, Secrets, Files, file actions, and Sessions. |
 | 33 | The public landing was not tracked in this repo and did not reflect the latest mobile starter, launch assist, and quiet notification work. | 4 | 3 | 12 | Implemented | Round 19 adds a tracked static landing under `public/` and deploys it to `https://anyagent-bridge.vercel.app`; production audit passed at 1440, 390, and 320 widths. |
 | 34 | Final evidence was scattered across many round reports, and the real-phone smoke still needed an explicit checklist. | 4 | 5 | 20 | Implemented | Round 20 adds `docs/FINAL_UX_AUDIT.md`, a consolidated final acceptance report, and a 30-minute physical-phone smoke checklist. |
+| 35 | The physical-phone smoke checklist still lacked a fillable evidence artifact for recording pass/fail, device, network, cleanup, and failures. | 3 | 5 | 15 | Implemented | Round 21 adds `docs/PHONE_SMOKE_REPORT_TEMPLATE.md` and links it from the final audit. |
 
 Round 1 verification:
 
@@ -282,3 +283,9 @@ Round 20 evidence:
 - Tailscale funnel 390px final run verified external reachability, fresh starter, one-tap `pwd`, output, and no horizontal overflow.
 - Temp sessions 186, 187, 188, and 189 were deleted; session count returned to 37.
 - Added final audit and physical-phone smoke checklist: `docs/FINAL_UX_AUDIT.md`.
+
+Round 21 evidence:
+
+- Added a fillable physical-phone smoke report template: `docs/PHONE_SMOKE_REPORT_TEMPLATE.md`.
+- The template captures phone model, OS/browser, network path, 20 step results, failure severity, evidence paths, temporary session ids, cleanup result, and final verdict.
+- Linked the template from `docs/FINAL_UX_AUDIT.md` so the remaining real-phone verification produces a concrete audit artifact.
