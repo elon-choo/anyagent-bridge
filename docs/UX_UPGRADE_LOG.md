@@ -44,6 +44,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 31 | Major overlays looked modal but lacked dialog semantics and left focus on toolbar buttons behind them. | 3 | 5 | 15 | Implemented | Round 14 adds dialog/label/modal ARIA wiring and initial focus for Connect, Projects, Secrets, Files, file actions, and Sessions. |
 | 32 | Modal focus could still escape with Tab, and closing overlays did not restore focus to the opener. | 3 | 5 | 15 | Implemented | Round 15 adds shared modal focus containment and opener restoration for Connect, Projects, Secrets, Files, file actions, and Sessions. |
 | 33 | The public landing was not tracked in this repo and did not reflect the latest mobile starter, launch assist, and quiet notification work. | 4 | 3 | 12 | Implemented | Round 19 adds a tracked static landing under `public/` and deploys it to `https://anyagent-bridge.vercel.app`; production audit passed at 1440, 390, and 320 widths. |
+| 34 | Final evidence was scattered across many round reports, and the real-phone smoke still needed an explicit checklist. | 4 | 5 | 20 | Implemented | Round 20 adds `docs/FINAL_UX_AUDIT.md`, a consolidated final acceptance report, and a 30-minute physical-phone smoke checklist. |
 
 Round 1 verification:
 
@@ -270,3 +271,14 @@ Round 19 evidence:
 - Local static audit: `/tmp/anyagent-bridge-ux-round19/landing-local/report.json` passed for 1440x900, 390x844, and 320x720 with page errors 0, console errors 0, failed requests 0, horizontal overflow 0, all images loaded, all CTA targets 40px+ high, and next-section hint visible in the first viewport.
 - Deployed via Vercel prebuilt production deploy to `dpl_5qcfgheMgkPSMzWnatvVAC5SDgaB`; alias `https://anyagent-bridge.vercel.app` returned 200 with 20,189-byte HTML and screenshot endpoints returned 200.
 - Production Playwright audit: `/tmp/anyagent-bridge-ux-round19/landing-production/report.json` passed at 1440, 390, and 320 widths with page errors 0, console errors 0, failed requests 0, all images loaded, no horizontal overflow, touch-safe CTAs, and content markers for starter, Quiet, launch assist, and Node 18+.
+
+Round 20 evidence:
+
+- Ran final current-state acceptance against the local app, Tailscale funnel, production landing, modal focus behavior, and PWA endpoints.
+- Consolidated acceptance: `/tmp/anyagent-bridge-final-audit/final-acceptance-summary.json` passed with page errors 0, console errors 0, native dialogs 0, request failures 0, local desktop/mobile checks true, funnel mobile checks true, production landing checks true, and modal focus checks true.
+- Broad acceptance report: `/tmp/anyagent-bridge-final-audit/final-acceptance-report.json`; modal focus timing confirmation: `/tmp/anyagent-bridge-final-audit/modal-focus-report.json`; PWA endpoint report: `/tmp/anyagent-bridge-final-audit/pwa-endpoints-report.json`.
+- Local desktop final run verified fresh starter, `sendToAgent`, output, image attach, Esc input, six major modals, and offline/online reconnect.
+- Local 320px final run verified one-tap starter `pwd`, no horizontal overflow, toolbar/starter touch safety, real `startAgent`, launch assist, Esc, and Ctrl-C.
+- Tailscale funnel 390px final run verified external reachability, fresh starter, one-tap `pwd`, output, and no horizontal overflow.
+- Temp sessions 186, 187, 188, and 189 were deleted; session count returned to 37.
+- Added final audit and physical-phone smoke checklist: `docs/FINAL_UX_AUDIT.md`.
