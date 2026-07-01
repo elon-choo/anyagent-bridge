@@ -34,7 +34,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 21 | Notification settings are one-button only; there is no quiet/noise control. | 3 | 3 | 9 | Backlog | Code inspection of push setup. |
 | 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Implemented | Round 2 added a persistent top-bar exposure badge: Local, Network, or Tunnel. |
 | 23 | Markdown preview depends on runtime CDN loading. | 3 | 3 | 9 | Implemented | Round 10 falls back to raw Markdown with an inline warning when marked/DOMPurify cannot load. |
-| 24 | Reduced-motion and animation preferences are not explicitly handled. | 2 | 4 | 8 | Backlog | CSS inspection. |
+| 24 | Reduced-motion and animation preferences are not explicitly handled. | 2 | 4 | 8 | Implemented | Round 13 adds a `prefers-reduced-motion: reduce` CSS override; focused after test measured button/toast transitions at `0s`. |
 | 25 | There were no one-tap common command snippets for phone use. | 4 | 5 | 20 | Implemented | Round 4 quick command chips send via existing `sendToAgent`; all chips are 44px+ on mobile. |
 | 26 | Compose had no local command history recall after sending. | 3 | 5 | 15 | Implemented | Round 4 adds in-memory per-session recall with ArrowUp/ArrowDown; nothing is persisted to storage. |
 | 27 | Session rename/close used native `prompt`/`confirm` dialogs and tiny 18-20px row actions on mobile. | 4 | 5 | 20 | Implemented | Round 5 replaced them with inline rename and two-step close controls; row action buttons are 44px+ on mobile. |
@@ -194,3 +194,13 @@ Round 12 evidence:
 - Full 320/390 user-control touch-target audit with notification toast visible: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0; native dialogs 0.
 - Test cleanup removed temp sessions 137, 138, 139, 140, 141, and 142 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round12/full/`.
+
+Round 13 evidence:
+
+- Before focused reduced-motion probe: browser matched `prefers-reduced-motion: reduce`, but Start button transitions were `0.15s, 0.15s`, toast transitions were `0.2s, 0.2s`, and the visible toast still had a vertical translate offset.
+- Added a client-only `prefers-reduced-motion: reduce` CSS override that zeroes transition delay/duration, minimizes animation duration/iterations, keeps scroll behavior automatic, and removes the toast slide offset.
+- Focused after probe: button transition duration `0s`, toast transition duration `0s`, toast transform vertical offset `0`, page errors 0, native dialogs 0, and session count stayed 37.
+- Full desktop/mobile flow under reduced-motion emulation: page errors 0, console errors 0, native dialogs 0, project-scoped agent start, manual `sendToAgent`, image attach, Tab special key, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, Files tree open, and notification denied toast all passed.
+- Full 320/390 reduced-motion audit: button/toast transition durations `0s`, toast vertical offset 0, 0 audited controls under 44px, toolbar hidden controls 0, horizontal document overflow 0, native dialogs 0.
+- Test cleanup removed temp sessions 143, 144, 145, 146, 147, and 148 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round13/full/`.
