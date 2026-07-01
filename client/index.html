@@ -245,6 +245,87 @@
   .fx-prev table { border-collapse: collapse; } .fx-prev th, .fx-prev td { border: 1px solid var(--border); padding: 6px 10px; }
   .fx-prev img { max-width: 100%; }
   @media (max-width: 760px) { #fileExp .fx-tree { width: 42%; } #fileExp .fx-prev { display: none !important; } }
+
+  /* ---------- Mobile input dock: key bar + compose box ---------- */
+  #dock { flex: 0 0 auto; background: var(--bar); border-top: 1px solid var(--border); display: none; flex-direction: column; }
+  #dock.on { display: flex; }
+  #keybar {
+    display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid var(--border); scrollbar-width: thin;
+  }
+  #keybar::-webkit-scrollbar { height: 5px; }
+  #keybar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  #keybar .kb {
+    flex: 0 0 auto; min-width: 40px; padding: 7px 10px; font-size: 13px; line-height: 1;
+    background: #0d1117; border: 1px solid var(--border); border-radius: 7px; color: var(--fg);
+    cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
+  }
+  #keybar .kb:hover { background: #21262d; }
+  #keybar .kb:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #keybar .kb.sticky.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #keybar .kb.wide { min-width: auto; }
+  #keybar .kb .sub { color: var(--muted); font-size: 10px; }
+
+  #composebar { display: flex; align-items: flex-end; gap: 7px; padding: 7px 8px; }
+  #composebar .attach {
+    flex: 0 0 auto; padding: 8px 10px; font-size: 15px; background: #0d1117; border: 1px solid var(--border);
+    border-radius: 8px; color: var(--fg); cursor: pointer;
+  }
+  #composebar .attach:hover { background: #21262d; }
+  #composeInput {
+    flex: 1 1 auto; resize: none; min-height: 38px; max-height: 132px; padding: 9px 11px; line-height: 1.4;
+    font-family: inherit; font-size: 14px; background: #0d1117; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 8px; outline: none; overflow-y: auto;
+  }
+  #composeInput:focus { border-color: var(--accent); }
+  #composeSend {
+    flex: 0 0 auto; padding: 9px 15px; font-weight: 600; background: var(--accent); border: 1px solid var(--accent);
+    color: #fff; border-radius: 8px; cursor: pointer; font-size: 14px;
+  }
+  #composeSend:hover { background: #4493f8; }
+  #composeSend:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* dock toggle + drag-over hint on the terminal */
+  #dockToggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #termwrap.dragover::after {
+    content: "🖼  Drop an image to attach"; position: absolute; inset: 8px; z-index: 5;
+    display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--accent);
+    background: rgba(47,129,247,.10); border: 2px dashed var(--accent); border-radius: 10px; pointer-events: none;
+  }
+
+  /* toast */
+  #toast {
+    position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%) translateY(20px);
+    background: #21262d; border: 1px solid var(--border); color: var(--fg); font-size: 13px;
+    padding: 9px 16px; border-radius: 999px; box-shadow: 0 8px 26px rgba(0,0,0,.5);
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 90; max-width: 88vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { border-color: var(--red); color: #ffb4ae; }
+
+  /* ---------- Sessions manager ---------- */
+  #sessModal { position: fixed; inset: 0; z-index: 65; background: rgba(13,17,23,.96); display: none; align-items: center; justify-content: center; padding: 18px; }
+  #sessModal.open { display: flex; }
+  #sessModal .card { position: relative; background: var(--bar); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; padding: 20px 22px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  #sessModal h2 { margin: 0 0 2px; font-size: 17px; }
+  #sessModal .sub { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  #sessModal .pm-close { position: absolute; top: 12px; right: 14px; background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+  #sessModal .pm-close:hover { color: var(--fg); }
+  #sessModal .sx-list { list-style: none; margin: 0 0 12px; padding: 0; }
+  #sessModal .sx-item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 7px; cursor: pointer; }
+  #sessModal .sx-item:hover { background: #0d1117; }
+  #sessModal .sx-item.cur { border-color: var(--accent); background: rgba(47,129,247,.10); }
+  #sessModal .sx-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; background: var(--muted); }
+  #sessModal .sx-meta { flex: 1; min-width: 0; }
+  #sessModal .sx-nm { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sessModal .sx-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sessModal .sx-cur-badge { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 6px; }
+  #sessModal .sx-act { display: flex; gap: 3px; flex: 0 0 auto; }
+  #sessModal .sx-act button { background: transparent; border: none; cursor: pointer; font-size: 13px; padding: 2px 4px; color: var(--muted); }
+  #sessModal .sx-act button:hover { color: var(--fg); }
+  #sessModal .sx-act button.kill:hover { color: var(--red); }
+  #sessModal .sx-empty { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  #sessModal .sx-new { width: 100%; }
 </style>
 </head>
 <body>
@@ -259,10 +340,34 @@
     <button id="secBtn" title="Save API keys / tokens into a project's .env.local">🔑 Secrets</button>
     <button id="filesBtn" title="Browse and edit files — code & markdown">📂 Files</button>
     <button id="notifBtn" title="Get a push when a session needs you (done · progress · question)">🔔 알림</button>
+    <button id="sessBtn" title="Sessions — switch, rename, or close running sessions">🖥 Sessions</button>
+    <button id="dockToggle" class="on" title="Message box &amp; key bar (paste screenshots, arrows, Esc, Ctrl-C)">⌨️</button>
     <span class="spacer"></span>
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
   </div>
   <div id="termwrap"><div id="terminal"></div></div>
+  <div id="dock" class="on">
+    <div id="keybar"></div>
+    <div id="composebar">
+      <button class="attach" id="composeAttach" title="Attach an image (or paste / drag one in)">📎</button>
+      <textarea id="composeInput" rows="1" placeholder="Message the agent…  (Enter: send · Shift+Enter: newline)"
+        enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+      <button id="composeSend">Send</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="imgFile" accept="image/*" style="display:none" />
+<div id="toast"></div>
+
+<div id="sessModal">
+  <div class="card">
+    <button class="pm-close" id="sessClose" aria-label="Close">×</button>
+    <h2>Sessions</h2>
+    <p class="sub">Each session is a terminal that keeps running on your computer. Switch between them, rename, or close.</p>
+    <ul class="sx-list" id="sxList"></ul>
+    <p class="sx-empty" id="sxEmpty" style="display:none">No other sessions.</p>
+    <button class="primary sx-new" id="sxNew">＋ New session</button>
+  </div>
 </div>
 
 <div id="gate">
@@ -417,6 +522,10 @@
   let reconnectDelay = 1000;        // backoff base
   const MAX_RECONNECT_DELAY = 15000;
   let pingTimer = null;
+  let currentSessionId = null;      // id of the session this socket is attached to (from `ready`)
+  let targetSessionId = null;       // when set, the next connect() attaches to THIS session (switch/resume)
+  let lastMsgAt = 0;                // last time any server message arrived (staleness watchdog)
+  let onSessionReady = null;        // optional hook the dock module sets to refresh session UI
 
   // ---------- Status UI ----------
   function setStatus(state, text) {
@@ -486,6 +595,11 @@
   }
 
   function connect() {
+    // Re-entry guard: never open a second socket while one is already CONNECTING or
+    // OPEN. Without this, focus/online/visibility events firing mid-connect (before
+    // onopen sets `connected`) would dial again → ghost sockets that each create a
+    // fresh server session.
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
     clearTimeout(reconnectTimer);
     manualClose = false;
     setStatus("connecting", "connecting…");
@@ -500,13 +614,17 @@
     ws.onopen = () => {
       connected = true;
       reconnectDelay = 1000;
+      lastMsgAt = Date.now();   // baseline so the staleness watchdog has a start point (0 would never fire)
       setStatus("connected", "connected");
-      // initialize PTY with current geometry
-      send({ type: "init", cols: term ? term.cols : 80, rows: term ? term.rows : 24 });
+      // initialize PTY with current geometry. When targetSessionId is set we attach
+      // to that existing session (switch/resume); otherwise (undefined) the server
+      // creates a fresh session — byte-identical to the original behavior.
+      send({ type: "init", cols: term ? term.cols : 80, rows: term ? term.rows : 24, sessionId: targetSessionId || undefined });
       startPing();
     };
 
     ws.onmessage = (ev) => {
+      lastMsgAt = Date.now();
       let msg;
       try { msg = JSON.parse(ev.data); } catch (_) { return; }
       handle(msg);
@@ -559,8 +677,11 @@
   function handle(msg) {
     switch (msg.type) {
       case "ready":
-        // session established; nothing required, but resync size
+        // session established; remember which one so an auto-reconnect (network blip)
+        // reattaches to the SAME session instead of spawning a new one.
+        if (msg.sessionId != null) { currentSessionId = msg.sessionId; targetSessionId = msg.sessionId; }
         if (connected && term) send({ type: "resize", cols: term.cols, rows: term.rows });
+        if (typeof onSessionReady === "function") onSessionReady();
         break;
       case "output":
         if (term && typeof msg.data === "string") term.write(msg.data);
@@ -1279,6 +1400,195 @@
       } catch (e) { alert("알림 설정 실패: " + ((e && e.message) || e)); }
     }
     notifBtn.addEventListener("click", enable);
+  })();
+
+  // ---------- Mobile input dock: key bar · compose box · image · sessions ----------
+  (function setupDock() {
+    const dock = $("dock"), keybar = $("keybar"), dockToggle = $("dockToggle");
+    const ci = $("composeInput"), sendBtn = $("composeSend"), attachBtn = $("composeAttach"), imgFile = $("imgFile");
+    const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList");
+
+    // ---- toast ----
+    let toastT = null;
+    function toast(msg, isErr) {
+      const t = $("toast"); t.textContent = msg; t.className = isErr ? "err show" : "show";
+      clearTimeout(toastT); toastT = setTimeout(() => { t.className = isErr ? "err" : ""; }, 2200);
+    }
+
+    // ---- key bar: each button injects a raw sequence into the PTY ----
+    // Arrows/Esc/Tab/Ctrl-combos don't exist on a phone's soft keyboard, so expose them here.
+    const KEYS = [
+      { t: "Esc", d: "\x1b" }, { t: "Tab", d: "\t" },
+      { t: "▲", d: "\x1b[A" }, { t: "▼", d: "\x1b[B" }, { t: "◀", d: "\x1b[D" }, { t: "▶", d: "\x1b[C" },
+      { t: "^C", d: "\x03" }, { t: "^D", d: "\x04" }, { t: "^Z", d: "\x1a" }, { t: "^L", d: "\x0c" },
+      { t: "⏎", d: "\r" }, { t: "|", d: "|" }, { t: "~", d: "~" }, { t: "/", d: "/" }, { t: "\\", d: "\\" }, { t: "-", d: "-" },
+      { t: "Clear", clear: true },
+    ];
+    function buildKeybar() {
+      keybar.innerHTML = "";
+      for (const k of KEYS) {
+        const b = document.createElement("div");
+        b.className = "kb" + (k.t.length > 2 ? " wide" : "");
+        b.textContent = k.t;
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (k.clear) { if (term) term.clear(); return; }
+          if (!send({ type: "input", data: k.d })) toast("Not connected", true);
+          if (term) term.focus();
+        });
+        keybar.appendChild(b);
+      }
+    }
+    buildKeybar();
+
+    // ---- compose box (IME-safe: never submit mid-composition) ----
+    let composing = false;
+    ci.addEventListener("compositionstart", () => { composing = true; });
+    ci.addEventListener("compositionend", () => { composing = false; });
+    function autogrow() { ci.style.height = "auto"; ci.style.height = Math.min(ci.scrollHeight, 132) + "px"; }
+    ci.addEventListener("input", autogrow);
+    function sendCompose() {
+      const text = ci.value;
+      if (!text.trim()) return;
+      // sendToAgent writes the text + CR to the PTY (submits) — same as typing then Enter.
+      if (!send({ type: "sendToAgent", text })) { toast("Not connected", true); return; }
+      ci.value = ""; autogrow();
+    }
+    sendBtn.addEventListener("click", sendCompose);
+    ci.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !composing && !e.isComposing) { e.preventDefault(); sendCompose(); }
+    });
+
+    // ---- image / screenshot: attach button, clipboard paste, drag & drop ----
+    async function uploadImage(file) {
+      if (!file) return;
+      if (!/^image\//.test(file.type || "")) { toast("Only images can be attached", true); return; }
+      toast("Uploading image…");
+      const fd = new FormData(); fd.append("image", file);
+      try {
+        const r = await fetch("/api/upload-image", { method: "POST", credentials: "include",
+          headers: token ? { Authorization: "Bearer " + token } : {}, body: fd });
+        if (r.status === 401 || r.status === 403) { toast("Session expired — reload to log in", true); return; }
+        const d = await r.json().catch(() => ({}));
+        if (!d || !d.path) { toast((d && d.error) || "Upload failed", true); return; }
+        insertPath(d.path);
+        toast("Image attached — its path is in the message box");
+      } catch (e) { toast("Upload failed — network error", true); }
+    }
+    function insertPath(p) {
+      // Drop the absolute path into the compose box; Claude Code / Codex read local image paths.
+      const cur = ci.value;
+      ci.value = (cur && !/\s$/.test(cur) ? cur + " " : cur) + p + " ";
+      autogrow(); ci.focus();
+    }
+    attachBtn.addEventListener("click", () => imgFile.click());
+    imgFile.addEventListener("change", () => { if (imgFile.files && imgFile.files[0]) uploadImage(imgFile.files[0]); imgFile.value = ""; });
+    document.addEventListener("paste", (e) => {
+      const items = e.clipboardData && e.clipboardData.items; if (!items) return;
+      for (const it of items) {
+        if (it.type && it.type.indexOf("image") === 0) { const f = it.getAsFile(); if (f) { uploadImage(f); e.preventDefault(); } return; }
+      }
+    });
+    ["dragenter", "dragover"].forEach((ev) => termwrap.addEventListener(ev, (e) => { e.preventDefault(); termwrap.classList.add("dragover"); }));
+    termwrap.addEventListener("dragleave", (e) => { if (e.target === termwrap) termwrap.classList.remove("dragover"); });
+    termwrap.addEventListener("drop", (e) => {
+      e.preventDefault(); termwrap.classList.remove("dragover");
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) uploadImage(f);
+    });
+
+    // ---- dock toggle ----
+    dockToggle.addEventListener("click", () => {
+      const on = dock.classList.toggle("on");
+      dockToggle.classList.toggle("on", on);
+      setTimeout(onResize, 60);   // terminal reflows into the freed / reclaimed height
+    });
+
+    // ---- sessions ----
+    function hardReconnect() {
+      if (gate.style.display === "flex") return;   // logged out — session actions shouldn't dial
+      // Cleanly drop the current socket and dial again (targetSessionId decides which
+      // session). Detach the old socket's handlers FIRST so its async onclose can't
+      // fire a spurious scheduleReconnect once connect() flips manualClose back to false.
+      if (ws) { try { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); } catch (_) {} ws = null; }
+      if (term) term.reset();
+      reconnectDelay = 1000;
+      connect();
+    }
+    async function loadSessions() {
+      sxList.innerHTML = "";
+      let list = [];
+      try { const d = await api("/api/sessions"); list = d.sessions || []; } catch (_) {}
+      $("sxEmpty").style.display = list.length ? "none" : "";
+      for (const s of list) {
+        const li = document.createElement("li");
+        li.className = "sx-item" + (s.sessionId === currentSessionId ? " cur" : "");
+        const dot = document.createElement("span"); dot.className = "sx-dot";
+        // only accept a safe color literal (hex / rgb / keyword) — never url(...) etc.
+        if (s.color && /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|rgba?\([\d.,\s%]+\))$/.test(s.color)) dot.style.background = s.color;
+        const meta = document.createElement("div"); meta.className = "sx-meta";
+        const nm = document.createElement("div"); nm.className = "sx-nm";
+        nm.textContent = s.displayName || s.projectName || ("Session " + s.sessionId);
+        const sub = document.createElement("div"); sub.className = "sx-sub";
+        sub.textContent = (s.projectPath || "~") + (s.agentName ? "  ·  " + s.agentName : "");
+        meta.appendChild(nm); meta.appendChild(sub);
+        const act = document.createElement("div"); act.className = "sx-act";
+        if (s.sessionId === currentSessionId) { const bg = document.createElement("span"); bg.className = "sx-cur-badge"; bg.textContent = "current"; act.appendChild(bg); }
+        const rn = document.createElement("button"); rn.textContent = "✏"; rn.title = "Rename";
+        rn.addEventListener("click", (e) => { e.stopPropagation(); renameSession(s); });
+        const kl = document.createElement("button"); kl.className = "kill"; kl.textContent = "✕"; kl.title = "Close";
+        kl.addEventListener("click", (e) => { e.stopPropagation(); killSession(s); });
+        act.appendChild(rn); act.appendChild(kl);
+        li.appendChild(dot); li.appendChild(meta); li.appendChild(act);
+        li.addEventListener("click", () => switchSession(s.sessionId));
+        sxList.appendChild(li);
+      }
+    }
+    function switchSession(id) {
+      if (id === currentSessionId) { closeSess(); return; }
+      targetSessionId = id; closeSess(); hardReconnect();
+    }
+    function newSession() { targetSessionId = null; closeSess(); hardReconnect(); }
+    async function renameSession(s) {
+      const nn = prompt("Rename session:", s.displayName || ("Session " + s.sessionId));
+      if (nn == null) return;
+      try {
+        await fetch("/api/sessions/" + s.sessionId + "/name", { method: "PATCH", credentials: "include",
+          headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: "Bearer " + token } : {}),
+          body: JSON.stringify({ name: nn }) });
+      } catch (_) {}
+      loadSessions();
+    }
+    async function killSession(s) {
+      if (!confirm("Close this session? Anything running in it will be terminated.")) return;
+      try { await fetch("/api/sessions/" + s.sessionId, { method: "DELETE", credentials: "include", headers: token ? { Authorization: "Bearer " + token } : {} }); } catch (_) {}
+      if (s.sessionId === currentSessionId) { targetSessionId = null; hardReconnect(); }
+      loadSessions();
+    }
+    function openSess() { sessModal.classList.add("open"); loadSessions(); }
+    function closeSess() { sessModal.classList.remove("open"); }
+    $("sessBtn").addEventListener("click", openSess);
+    $("sessClose").addEventListener("click", closeSess);
+    $("sxNew").addEventListener("click", newSession);
+    sessModal.addEventListener("click", (e) => { if (e.target === sessModal) closeSess(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && sessModal.classList.contains("open")) closeSess(); });
+    onSessionReady = () => { if (sessModal.classList.contains("open")) loadSessions(); };
+
+    // ---- reconnect robustness: come back fast when the tab/app/network returns ----
+    function maybeReconnect() {
+      if (connected) return;
+      if (ws && ws.readyState === WebSocket.CONNECTING) return;   // a dial is already in flight
+      if (gate.style.display === "flex") return;                 // not logged in yet — don't dial
+      clearTimeout(reconnectTimer); reconnectDelay = 1000; connect();
+    }
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) maybeReconnect(); });
+    window.addEventListener("online", maybeReconnect);
+    window.addEventListener("focus", maybeReconnect);
+    // staleness watchdog: connected but silent too long → force a reconnect
+    setInterval(() => {
+      if (connected && lastMsgAt && Date.now() - lastMsgAt > 75000) {
+        try { ws && ws.close(); } catch (_) {}   // onclose → scheduleReconnect
+      }
+    }, 20000);
   })();
 
   // ---------- Bootstrap ----------
