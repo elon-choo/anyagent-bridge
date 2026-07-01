@@ -51,6 +51,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 38 | The tracked final acceptance still did not deeply exercise the mobile Files editor/Markdown preview path required by the phone smoke. | 4 | 5 | 20 | Implemented | Round 24 adds a 390px mobile Files preview flow to `test/final-ux-acceptance.js` and raises mobile Files editbar/mode controls to touch-safe dimensions. |
 | 39 | The tracked final acceptance still only implied Sessions coverage through modal accessibility, leaving new-session and switch-back behavior easy to regress. | 4 | 5 | 20 | Implemented | Round 25 adds a desktop Sessions flow to `test/final-ux-acceptance.js`: create a second session from the modal, run a command there, switch back to the first session, verify original output, and clean all temp sessions. |
 | 40 | The tracked final acceptance still did not prove unsent compose/image drafts stay isolated while switching sessions. | 5 | 5 | 25 | Implemented | Round 26 extends the desktop Sessions flow to verify the first session's uploaded image draft restores, a new session starts clean, and the second session's unsent draft restores only in that second session. |
+| 41 | The tracked final acceptance still accepted mobile toolbar controls below the stated 44px phone target. | 4 | 5 | 20 | Implemented | Round 27 tightens `test/final-ux-acceptance.js` so local 320px and funnel 390px toolbar controls must all measure 44x44 or larger. |
 
 Round 1 verification:
 
@@ -329,3 +330,10 @@ Round 26 evidence:
 - The runner now verifies the first session's uploaded `pixel.png` compose draft survives switching away and back, the new second session starts with an empty compose box, and a typed-but-unsent second-session draft restores only when returning to that second session.
 - Latest `npm run test:ux-final` passed with `localDesktop.sessionSwitch: true` and `localDesktop.draftIsolation: true`.
 - Temporary sessions 236, 237, 238, 239, and 240 were deleted; session count returned from 37 to 37.
+
+Round 27 evidence:
+
+- Tightened `test/final-ux-acceptance.js` from `toolbarTouchSafe40` to `toolbarTouchSafe44`.
+- The final acceptance runner now fails if any visible local 320px or funnel 390px toolbar control is below 44px wide or 44px high.
+- Latest `npm run test:ux-final` passed with `localMobile320.toolbarTouch: true` and `funnelMobile390.toolbarTouch: true`; measured toolbar controls were all 44px+.
+- Temporary sessions 241, 242, 243, 244, and 245 were deleted; session count returned from 37 to 37.

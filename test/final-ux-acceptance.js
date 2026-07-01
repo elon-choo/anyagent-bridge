@@ -285,7 +285,7 @@ async function stateSnapshot(page) {
       toolbarButtons,
       starterButtonsSafe44: starterButtons.every(b => b.w >= 44 && b.h >= 44),
       agentButtonsSafe44: agentButtons.every(b => b.w >= 44 && b.h >= 44),
-      toolbarTouchSafe40: toolbarButtons.every(b => b.w >= 40 && b.h >= 31)
+      toolbarTouchSafe44: toolbarButtons.every(b => b.w >= 44 && b.h >= 44)
     };
   });
 }
@@ -820,7 +820,7 @@ function buildChecks(report) {
       starterTouch: mobile.initial.starterButtonsSafe44,
       oneTapFirstCommand: hasSent(mobile.tracker, 'sendToAgent', item => item.text === 'pwd') && mobile.afterFirstCommand.bodyHasHome,
       noOverflow: !mobile.initial.overflowX && !mobile.afterFirstCommand.overflowX && !mobile.launchAssist.overflowX,
-      toolbarTouch: mobile.initial.toolbarTouchSafe40,
+      toolbarTouch: mobile.initial.toolbarTouchSafe44,
       launchAssist: !!mobile.launchAssist.agentAssist && mobile.launchAssist.agentButtonsSafe44,
       startAndKeys: hasSent(mobile.tracker, 'startAgent') &&
         hasSent(mobile.tracker, 'input', item => item.data === '\x1b') &&
@@ -841,7 +841,8 @@ function buildChecks(report) {
       starterOpen: !!funnel.initial.starterOpen,
       starterTouch: funnel.initial.starterButtonsSafe44,
       firstCommand: hasSent(funnel.tracker, 'sendToAgent', item => item.text === 'pwd') && funnel.afterFirstCommand.bodyHasHome,
-      noOverflow: !funnel.initial.overflowX && !funnel.afterFirstCommand.overflowX
+      noOverflow: !funnel.initial.overflowX && !funnel.afterFirstCommand.overflowX,
+      toolbarTouch: funnel.initial.toolbarTouchSafe44
     },
     landingProduction: landing.skipped ? { skipped: true } : {
       allPassed: landing.results.every(result =>
