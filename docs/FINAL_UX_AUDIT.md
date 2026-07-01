@@ -2,7 +2,7 @@
 
 Date: 2026-07-01
 
-This audit summarizes the current AnyAgent Bridge UX upgrade state after 20 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
+This audit summarizes the current AnyAgent Bridge UX upgrade state after 22 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
 
 ## Current Status
 
@@ -11,6 +11,8 @@ Automated desktop, mobile, external-funnel, and landing checks pass. The remaini
 Latest automated evidence:
 
 - Final consolidated acceptance: `/tmp/anyagent-bridge-final-audit/final-acceptance-summary.json`
+- Reproducible acceptance command: `npm run test:ux-final`
+- Latest reproducible acceptance: `/tmp/anyagent-bridge-final-audit/final-ux-acceptance-summary.json`
 - Broad app acceptance: `/tmp/anyagent-bridge-final-audit/final-acceptance-report.json`
 - Modal focus confirmation: `/tmp/anyagent-bridge-final-audit/modal-focus-report.json`
 - PWA/installability endpoints: `/tmp/anyagent-bridge-final-audit/pwa-endpoints-report.json`
@@ -27,8 +29,8 @@ Latest automated evidence:
 | Prefer client-only, avoid server churn | UX rounds changed `client/`, `public/`, `.gitignore`, and docs; final `git diff --stat -- server/` is empty. | Verified |
 | Secret safety | Patch-level secret scans are clean; `.data/`, `.env`, `.env.local`, `.vercel/`, `.npmrc`, and generated local state remain ignored. | Verified |
 | No package release performed | No package release command was run. | Verified |
-| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 35 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, and physical-phone evidence capture. | Verified |
-| Implement prioritized improvements in small rounds | Rounds 1-20 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
+| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 36 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, physical-phone evidence capture, and audit reproducibility. | Verified |
+| Implement prioritized improvements in small rounds | Rounds 1-22 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
 | Beginners can send the first mobile command within 3 taps | Final local 320px and funnel 390px checks show fresh starter visible, `pwd` sends with one tap, output appears, and starter closes. | Verified |
 | 320-1440px layouts do not break | Final acceptance covers local app at 1440 and 320, funnel at 390, landing at 1440/390/320; horizontal overflow 0. | Verified |
 | Touch targets are sufficient | Mobile starter/launch-assist controls are 44px+; toolbar audited 40px+ in final run and 44px+ in prior mobile-specific rounds. | Verified |
@@ -45,7 +47,7 @@ Latest automated evidence:
 
 ## Finding Status Summary
 
-All 35 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
+All 36 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
 
 | Range | Area | Status |
 |---|---|---|
@@ -56,11 +58,13 @@ All 35 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Ver
 | 16-19 | Missing env noise, CDN fallbacks, PWA icon availability, offline state | Implemented / Verified OK |
 | 20-23 | File dialogs, notification modes, exposure badge, Markdown fallback | Implemented |
 | 24-28 | Reduced motion, quick commands, command history, session row actions, mobile preview | Implemented |
-| 29-35 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template | Implemented |
+| 29-36 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template, reproducible final acceptance | Implemented |
 
 ## Final Automated Acceptance
 
 Final acceptance was run against the current state, not historical artifacts.
+
+The tracked rerun command is `npm run test:ux-final`. It accepts `AAB_BASE_URL`, `AAB_FUNNEL_URL`, `AAB_LANDING_URL`, `AAB_AUTH_FILE`, `AAB_AUTH_VALUE`, `AAB_SKIP_FUNNEL=1`, `AAB_SKIP_LANDING=1`, and `AAB_OUTPUT_DIR`.
 
 Automated app scope:
 

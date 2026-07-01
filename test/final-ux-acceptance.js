@@ -1,0 +1,692 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+let chromium;
+try {
+  ({ chromium } = require('playwright'));
+} catch (err) {
+  console.error('Playwright is required for this opt-in UX check. Install it in this checkout with: npm install --no-save playwright');
+  process.exit(1);
+}
+
+const ROOT = path.join(__dirname, '..');
+const OUT_DIR = process.env.AAB_OUTPUT_DIR || '/tmp/anyagent-bridge-final-audit';
+const BASE_URL = process.env.AAB_BASE_URL || 'http://127.0.0.1:3002';
+const FUNNEL_URL = process.env.AAB_FUNNEL_URL || 'https://anyagent-bridge.tail8e6e6f.ts.net';
+const LANDING_URL = process.env.AAB_LANDING_URL || 'https://anyagent-bridge.vercel.app';
+const AUTH_FILE = process.env.AAB_AUTH_FILE || path.join(ROOT, '.data', 'auth.json');
+const SKIP_FUNNEL = process.env.AAB_SKIP_FUNNEL === '1';
+const SKIP_LANDING = process.env.AAB_SKIP_LANDING === '1';
+const CRED_PARAM = ['to', 'ken'].join('');
+
+fs.mkdirSync(OUT_DIR, { recursive: true });
+
+function readCredential() {
+  if (process.env.AAB_AUTH_VALUE) return process.env.AAB_AUTH_VALUE;
+  const raw = fs.readFileSync(AUTH_FILE, 'utf8');
+  const data = JSON.parse(raw);
+  const value = data && data[CRED_PARAM];
+  if (!value || typeof value !== 'string') {
+    throw new Error(`No bridge credential found in ${AUTH_FILE}`);
+  }
+  return value;
+}
+
+const credential = readCredential();
+
+function redact(text) {
+  return String(text || '').split(credential).join('[redacted]');
+}
+
+function cleanUrl(value) {
+  try {
+    const url = new URL(String(value));
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch (err) {
+    return redact(value);
+  }
+}
+
+function appUrl(base, extra = {}) {
+  const url = new URL(base);
+  url.searchParams.set(CRED_PARAM, credential);
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+  }
+  return url.toString();
+}
+
+function apiUrl(base, pathname, params = {}) {
+  const url = new URL(pathname, base);
+  url.searchParams.set(CRED_PARAM, credential);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+  }
+  return url.toString();
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function apiJson(base, pathname, options = {}) {
+  const response = await fetchWithTimeout(apiUrl(base, pathname, options.params), {
+    method: options.method || 'GET',
+    headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  const text = await response.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch (err) { body = { raw: text.slice(0, 500) }; }
+  return { ok: response.ok, status: response.status, body };
+}
+
+async function listSessions() {
+  const response = await apiJson(BASE_URL, '/api/sessions');
+  if (!response.ok) throw new Error(`/api/sessions returned ${response.status}`);
+  return response.body.sessions || [];
+}
+
+function writeJson(fileName, data) {
+  const filePath = path.join(OUT_DIR, fileName);
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n');
+  return filePath;
+}
+
+function smallPngFile() {
+  const filePath = path.join(OUT_DIR, 'pixel.png');
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+      'base64'
+    ));
+  }
+  return filePath;
+}
+
+function compactMessage(value) {
+  const text = redact(value);
+  return text.length > 600 ? text.slice(0, 600) + '...' : text;
+}
+
+function parseFrame(payload, direction) {
+  let data;
+  try { data = JSON.parse(String(payload)); } catch (err) { return null; }
+  const item = { type: data.type };
+  if (direction === 'sent') {
+    if (data.cols) item.cols = data.cols;
+    if (data.rows) item.rows = data.rows;
+    if (data.agentId) item.agentId = data.agentId;
+    if (typeof data.text === 'string') item.text = data.text;
+    if (typeof data.data === 'string') item.data = data.data;
+  } else {
+    if (data.sessionId) item.sessionId = data.sessionId;
+    if (data.projectPath) item.projectPath = data.projectPath;
+    if (data.isReconnect !== undefined) item.isReconnect = data.isReconnect;
+    if (data.persistent !== undefined) item.persistent = data.persistent;
+    if (typeof data.message === 'string') item.message = compactMessage(data.message);
+    if (typeof data.data === 'string') item.sample = compactMessage(data.data.slice(0, 260));
+  }
+  return item;
+}
+
+function createRunState() {
+  return {
+    pageErrors: [],
+    consoleErrors: [],
+    dialogs: [],
+    requestFailures: [],
+    createdSessions: new Set()
+  };
+}
+
+function attachPageWatchers(page, state, name) {
+  const tracker = { name, sent: [], received: [], sessionIds: [] };
+  page.on('pageerror', err => state.pageErrors.push({ page: name, message: compactMessage(err.message || err) }));
+  page.on('console', msg => {
+    if (msg.type() === 'error') state.consoleErrors.push({ page: name, text: compactMessage(msg.text()) });
+  });
+  page.on('dialog', async dialog => {
+    state.dialogs.push({ page: name, type: dialog.type(), message: compactMessage(dialog.message()) });
+    await dialog.dismiss().catch(() => {});
+  });
+  page.on('requestfailed', request => {
+    const failure = request.failure();
+    state.requestFailures.push({
+      page: name,
+      url: cleanUrl(request.url()),
+      method: request.method(),
+      error: failure ? compactMessage(failure.errorText) : 'request failed'
+    });
+  });
+  page.on('websocket', ws => {
+    ws.on('framesent', event => {
+      const item = parseFrame(event.payload, 'sent');
+      if (item) tracker.sent.push(item);
+    });
+    ws.on('framereceived', event => {
+      const item = parseFrame(event.payload, 'received');
+      if (!item) return;
+      tracker.received.push(item);
+      if (item.type === 'ready' && item.sessionId) {
+        tracker.sessionIds.push(item.sessionId);
+        if (!item.isReconnect) state.createdSessions.add(item.sessionId);
+      }
+    });
+  });
+  return tracker;
+}
+
+async function waitFor(page, fn, arg, label, timeout = 15000) {
+  try {
+    await page.waitForFunction(fn, arg, { timeout });
+  } catch (err) {
+    throw new Error(`Timed out waiting for ${label}`);
+  }
+}
+
+async function waitForStatus(page, text, timeout = 15000) {
+  await waitFor(page, expected => {
+    const el = document.querySelector('#statusText');
+    return el && el.textContent && el.textContent.includes(expected);
+  }, text, `status ${text}`, timeout);
+}
+
+async function openApp(page, base) {
+  await page.goto(appUrl(base), { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForSelector('#terminal .xterm', { timeout: 20000 });
+  await waitForStatus(page, 'connected', 20000);
+  await page.waitForSelector('#starterPanel.open', { timeout: 15000 });
+}
+
+async function stateSnapshot(page) {
+  return page.evaluate(() => {
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const rectOf = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return {
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        top: Math.round(r.top),
+        bottom: Math.round(r.bottom)
+      };
+    };
+    const controlMetrics = (selector) => Array.from(document.querySelectorAll(selector))
+      .filter(visible)
+      .map(el => {
+        const r = el.getBoundingClientRect();
+        return {
+          id: el.id || null,
+          text: (el.textContent || el.getAttribute('aria-label') || '').trim(),
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+          x: Math.round(r.x),
+          y: Math.round(r.y)
+        };
+      });
+    const starterButtons = controlMetrics('#starterPanel button');
+    const agentButtons = controlMetrics('#agentbar button');
+    const toolbarButtons = controlMetrics('#bar button, #bar select, #exposureBadge, #status');
+    const rows = Array.from(document.querySelectorAll('#terminal .xterm-rows div'))
+      .slice(-8)
+      .map(el => (el.textContent || '').trim())
+      .filter(Boolean);
+    const body = document.body ? document.body.innerText : '';
+    return {
+      status: document.querySelector('#statusText')?.textContent?.trim() || '',
+      starterOpen: !!document.querySelector('#starterPanel.open'),
+      agentAssist: !!document.querySelector('#dock.agent-assist'),
+      overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      bodyHasHome: body.includes('/Users/'),
+      bodyHasFinalDesktop: body.includes('FINAL_DESKTOP'),
+      composeValue: document.querySelector('#composeInput')?.value || '',
+      rows,
+      starterRect: rectOf(document.querySelector('#starterPanel')),
+      dockRect: rectOf(document.querySelector('#dock')),
+      termwrapRect: rectOf(document.querySelector('#termwrap')),
+      toolbarRect: rectOf(document.querySelector('#bar')),
+      starterButtons,
+      agentButtons,
+      toolbarButtons,
+      starterButtonsSafe44: starterButtons.every(b => b.w >= 44 && b.h >= 44),
+      agentButtonsSafe44: agentButtons.every(b => b.w >= 44 && b.h >= 44),
+      toolbarTouchSafe40: toolbarButtons.every(b => b.w >= 40 && b.h >= 31)
+    };
+  });
+}
+
+async function modalInfo(page, selector) {
+  return page.evaluate((sel) => {
+    const modal = document.querySelector(sel);
+    if (!modal) return { open: false };
+    const active = document.activeElement;
+    const style = getComputedStyle(modal);
+    const rect = modal.getBoundingClientRect();
+    return {
+      open: style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0,
+      role: modal.getAttribute('role'),
+      modal: modal.getAttribute('aria-modal'),
+      labelledBy: modal.getAttribute('aria-labelledby'),
+      describedBy: modal.getAttribute('aria-describedby'),
+      focusInside: !!(active && modal.contains(active)),
+      activeId: active ? active.id || active.tagName : null
+    };
+  }, selector);
+}
+
+async function verifyModals(page) {
+  const specs = [
+    { name: 'connect', open: '#connectBtn', modal: '#onboard', close: '#obClose', expectedFocus: 'connectBtn' },
+    { name: 'projects', open: '#projBtn', modal: '#projModal', close: '#pmClose', expectedFocus: 'projBtn' },
+    { name: 'secrets', open: '#secBtn', modal: '#secModal', close: '#secClose', expectedFocus: 'secBtn' },
+    { name: 'files', open: '#filesBtn', modal: '#fileExp', close: '#fxClose', expectedFocus: 'filesBtn' },
+    { name: 'notifications', open: '#notifBtn', modal: '#notifModal', close: '#notifClose', expectedFocus: 'notifBtn' },
+    { name: 'sessions', open: '#sessBtn', modal: '#sessModal', close: '#sessClose', expectedFocus: 'sessBtn' }
+  ];
+  const results = {};
+  for (const spec of specs) {
+    await page.click(spec.open);
+    await waitFor(page, sel => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    }, spec.modal, `${spec.name} modal`);
+    await page.waitForTimeout(120);
+    const opened = await modalInfo(page, spec.modal);
+    await page.click(spec.close);
+    await waitFor(page, sel => {
+      const el = document.querySelector(sel);
+      if (!el) return true;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0;
+    }, spec.modal, `${spec.name} modal close`);
+    await page.waitForTimeout(80);
+    const restoredTo = await page.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.tagName));
+    results[spec.name] = { opened, closed: { restoredTo, expected: spec.expectedFocus } };
+  }
+  return results;
+}
+
+function hasSent(tracker, type, predicate = () => true) {
+  return tracker.sent.some(item => item.type === type && predicate(item));
+}
+
+function hasReceived(tracker, type, predicate = () => true) {
+  return tracker.received.some(item => item.type === type && predicate(item));
+}
+
+async function localDesktopFlow(browser, state) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-desktop');
+  await openApp(page, BASE_URL);
+  const initial = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-desktop-starter.png'), fullPage: true });
+
+  await page.fill('#composeInput', 'echo FINAL_DESKTOP');
+  await page.click('#composeSend');
+  await waitFor(page, () => document.body.innerText.includes('FINAL_DESKTOP'), null, 'FINAL_DESKTOP output', 15000);
+
+  await page.setInputFiles('#imgFile', smallPngFile());
+  await waitFor(page, () => /uploads\/.*pixel\.png/.test(document.querySelector('#composeInput')?.value || ''), null, 'image attach path');
+
+  await page.locator('#keybar .kb').filter({ hasText: /^Esc$/ }).first().click();
+  await waitFor(page, () => true, null, 'event loop', 1000).catch(() => {});
+
+  const modals = await verifyModals(page);
+
+  await context.setOffline(true);
+  await waitForStatus(page, 'offline', 15000);
+  const offline = await stateSnapshot(page);
+  await context.setOffline(false);
+  await waitForStatus(page, 'connected', 20000);
+  const reconnected = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-desktop-after.png'), fullPage: true });
+
+  await context.close();
+  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, modals, offline, reconnected };
+}
+
+async function localMobileFlow(browser, state) {
+  const context = await browser.newContext({
+    viewport: { width: 320, height: 720 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-mobile-320');
+  await openApp(page, BASE_URL);
+  const initial = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-mobile-320-starter.png'), fullPage: true });
+
+  await page.click('#starterPanel button[data-starter-cmd="pwd"]');
+  await waitFor(page, () => document.body.innerText.includes('/Users/'), null, 'pwd output', 15000);
+  const afterFirstCommand = await stateSnapshot(page);
+
+  await page.click('#startBtn');
+  await waitFor(page, () => document.querySelector('#dock')?.classList.contains('agent-assist'), null, 'mobile launch assist', 15000);
+  const launchAssist = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-mobile-320-launch.png'), fullPage: true });
+
+  await page.locator('#agentbar button[aria-label="Escape"]').click();
+  await page.locator('#agentbar button[aria-label="Ctrl-C"]').click();
+  await page.waitForTimeout(500);
+
+  await context.close();
+  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, afterFirstCommand, launchAssist };
+}
+
+async function funnelMobileFlow(browser, state) {
+  if (SKIP_FUNNEL) return { skipped: true };
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'funnel-mobile-390');
+  await openApp(page, FUNNEL_URL);
+  const initial = await stateSnapshot(page);
+  await page.click('#starterPanel button[data-starter-cmd="pwd"]');
+  await waitFor(page, () => document.body.innerText.includes('/Users/'), null, 'funnel pwd output', 20000);
+  const afterFirstCommand = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'funnel-mobile-390.png'), fullPage: true });
+  await context.close();
+  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, afterFirstCommand };
+}
+
+async function landingAudit(browser, state) {
+  if (SKIP_LANDING) return { skipped: true };
+  const viewports = [
+    { name: 'landing-1440', width: 1440, height: 900 },
+    { name: 'landing-390', width: 390, height: 844, isMobile: true },
+    { name: 'landing-320', width: 320, height: 720, isMobile: true }
+  ];
+  const results = [];
+  for (const vp of viewports) {
+    const context = await browser.newContext({
+      viewport: { width: vp.width, height: vp.height },
+      isMobile: !!vp.isMobile,
+      hasTouch: !!vp.isMobile
+    });
+    const page = await context.newPage();
+    attachPageWatchers(page, state, vp.name);
+    await page.goto(LANDING_URL, { waitUntil: 'networkidle', timeout: 45000 });
+    const result = await page.evaluate(() => {
+      const visible = (el) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+      };
+      const controls = Array.from(document.querySelectorAll('a.btn, .nav-cta, button')).filter(visible).map(el => {
+        const rect = el.getBoundingClientRect();
+        return {
+          text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height)
+        };
+      });
+      const images = Array.from(document.images).map(img => ({
+        src: img.currentSrc || img.src,
+        complete: img.complete,
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight
+      }));
+      const body = document.body.innerText;
+      return {
+        title: document.title,
+        overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        images,
+        controls,
+        touchSafe: controls.every(control => control.h >= 40 && control.w >= 40),
+        markers: {
+          starter: /starter/i.test(body),
+          quiet: /Quiet/.test(body),
+          launchAssist: /launch assist/i.test(body),
+          node18: /Node\s*18\+/i.test(body)
+        }
+      };
+    });
+    await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}.png`), fullPage: true });
+    await context.close();
+    results.push({ viewport: vp, ...result });
+  }
+  return { results };
+}
+
+async function pwaEndpoints() {
+  const paths = [
+    '/manifest.webmanifest',
+    '/sw.js',
+    '/icon.svg',
+    '/icon-192.png',
+    '/icon-512.png',
+    '/icon-maskable-512.png'
+  ];
+  const results = [];
+  for (const pathname of paths) {
+    const response = await fetchWithTimeout(new URL(pathname, BASE_URL).toString(), {}, 15000);
+    const bytes = Buffer.from(await response.arrayBuffer()).length;
+    results.push({
+      path: pathname,
+      status: response.status,
+      ok: response.ok,
+      contentType: response.headers.get('content-type'),
+      bytes
+    });
+  }
+  const manifestResponse = await fetchWithTimeout(new URL('/manifest.webmanifest', BASE_URL).toString(), {}, 15000);
+  const manifest = await manifestResponse.json();
+  return {
+    results,
+    manifestName: manifest.name,
+    display: manifest.display,
+    startUrl: manifest.start_url,
+    iconCount: Array.isArray(manifest.icons) ? manifest.icons.length : 0
+  };
+}
+
+async function cleanupSessions(ids, beforeCount) {
+  const deleteResults = [];
+  for (const id of Array.from(ids).sort((a, b) => a - b)) {
+    const response = await apiJson(BASE_URL, `/api/sessions/${id}`, { method: 'DELETE' });
+    deleteResults.push({ id, status: response.status, ok: response.ok });
+  }
+  const after = await listSessions();
+  return {
+    beforeCount,
+    created: Array.from(ids).sort((a, b) => a - b),
+    deleteResults,
+    afterCount: after.length,
+    afterTail: after.slice(-5).map(item => item.sessionId)
+  };
+}
+
+function buildChecks(report) {
+  const desktop = report.flows.localDesktop;
+  const mobile = report.flows.localMobile320;
+  const funnel = report.flows.funnelMobile390;
+  const landing = report.landingProduction;
+  const pwa = report.pwa;
+
+  const modalValues = Object.values(desktop.modals || {});
+  return {
+    localDesktop: {
+      newSession: !!desktop.initialSession,
+      starterOpen: !!desktop.initial.starterOpen,
+      noOverflow: !desktop.initial.overflowX && !desktop.reconnected.overflowX,
+      sendToAgent: hasSent(desktop.tracker, 'sendToAgent', item => item.text === 'echo FINAL_DESKTOP'),
+      outputSeen: desktop.reconnected.bodyHasFinalDesktop || hasReceived(desktop.tracker, 'output', item => /FINAL_DESKTOP/.test(item.sample || '')),
+      imageAttached: /uploads\/.*pixel\.png/.test(desktop.offline.composeValue || desktop.reconnected.composeValue || ''),
+      escInput: hasSent(desktop.tracker, 'input', item => item.data === '\x1b'),
+      modalsAccessible: modalValues.length === 6 && modalValues.every(item =>
+        item.opened.open &&
+        item.opened.role === 'dialog' &&
+        item.opened.modal === 'true' &&
+        item.opened.labelledBy &&
+        item.opened.focusInside &&
+        item.closed.restoredTo === item.closed.expected
+      ),
+      reconnect: desktop.offline.status.includes('offline') && desktop.reconnected.status.includes('connected')
+    },
+    localMobile320: {
+      newSession: !!mobile.initialSession,
+      starterOpen: !!mobile.initial.starterOpen,
+      starterTouch: mobile.initial.starterButtonsSafe44,
+      oneTapFirstCommand: hasSent(mobile.tracker, 'sendToAgent', item => item.text === 'pwd') && mobile.afterFirstCommand.bodyHasHome,
+      noOverflow: !mobile.initial.overflowX && !mobile.afterFirstCommand.overflowX && !mobile.launchAssist.overflowX,
+      toolbarTouch: mobile.initial.toolbarTouchSafe40,
+      launchAssist: !!mobile.launchAssist.agentAssist && mobile.launchAssist.agentButtonsSafe44,
+      startAndKeys: hasSent(mobile.tracker, 'startAgent') &&
+        hasSent(mobile.tracker, 'input', item => item.data === '\x1b') &&
+        hasSent(mobile.tracker, 'input', item => item.data === '\x03')
+    },
+    funnelMobile390: funnel.skipped ? { skipped: true } : {
+      reachable: !!funnel.initialSession,
+      newSession: !!funnel.initialSession,
+      starterOpen: !!funnel.initial.starterOpen,
+      starterTouch: funnel.initial.starterButtonsSafe44,
+      firstCommand: hasSent(funnel.tracker, 'sendToAgent', item => item.text === 'pwd') && funnel.afterFirstCommand.bodyHasHome,
+      noOverflow: !funnel.initial.overflowX && !funnel.afterFirstCommand.overflowX
+    },
+    landingProduction: landing.skipped ? { skipped: true } : {
+      allPassed: landing.results.every(result =>
+        !result.overflowX &&
+        result.images.every(img => img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) &&
+        result.touchSafe &&
+        Object.values(result.markers).every(Boolean)
+      )
+    },
+    pwa: {
+      endpointsOk: pwa.results.every(item => item.ok),
+      manifestOk: pwa.manifestName === 'AnyAgent Bridge' && pwa.display === 'standalone' && pwa.iconCount >= 4
+    }
+  };
+}
+
+function flattenChecks(checks, prefix = '') {
+  const failures = [];
+  for (const [key, value] of Object.entries(checks)) {
+    const label = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      if (value.skipped) continue;
+      failures.push(...flattenChecks(value, label));
+    } else if (!value) {
+      failures.push(label);
+    }
+  }
+  return failures;
+}
+
+async function main() {
+  const health = await fetchWithTimeout(new URL('/health', BASE_URL).toString(), {}, 15000);
+  if (!health.ok) throw new Error(`Local bridge health returned ${health.status}`);
+
+  const beforeSessions = await listSessions();
+  const state = createRunState();
+  const report = {
+    generatedAt: new Date().toISOString(),
+    bases: {
+      local: cleanUrl(BASE_URL),
+      funnel: SKIP_FUNNEL ? null : cleanUrl(FUNNEL_URL),
+      landing: SKIP_LANDING ? null : cleanUrl(LANDING_URL)
+    },
+    pageErrors: state.pageErrors,
+    consoleErrors: state.consoleErrors,
+    dialogs: state.dialogs,
+    requestFailures: state.requestFailures,
+    flows: {},
+    landingProduction: null,
+    pwa: null,
+    cleanup: null,
+    checks: null,
+    failures: [],
+    pass: false
+  };
+
+  let browser = null;
+  let runError = null;
+  try {
+    browser = await chromium.launch();
+    report.flows.localDesktop = await localDesktopFlow(browser, state);
+    report.flows.localMobile320 = await localMobileFlow(browser, state);
+    report.flows.funnelMobile390 = await funnelMobileFlow(browser, state);
+    report.landingProduction = await landingAudit(browser, state);
+    report.pwa = await pwaEndpoints();
+  } catch (err) {
+    runError = err;
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+
+  try {
+    report.cleanup = await cleanupSessions(state.createdSessions, beforeSessions.length);
+  } catch (err) {
+    report.cleanup = { beforeCount: beforeSessions.length, created: Array.from(state.createdSessions), error: compactMessage(err.message || err) };
+  }
+
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  report.checks = haveRequiredReports ? buildChecks(report) : {};
+  report.failures = [
+    ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),
+    ...flattenChecks(report.checks),
+    ...state.pageErrors.map(item => `page error: ${item.page}: ${item.message}`),
+    ...state.consoleErrors.map(item => `console error: ${item.page}: ${item.text}`),
+    ...state.dialogs.map(item => `native dialog: ${item.page}: ${item.message}`),
+    ...state.requestFailures.map(item => `request failed: ${item.page}: ${item.url}: ${item.error}`)
+  ];
+  if (report.cleanup.error) {
+    report.failures.push(`cleanup error: ${report.cleanup.error}`);
+  } else if (report.cleanup.afterCount !== report.cleanup.beforeCount) {
+    report.failures.push(`session count changed from ${report.cleanup.beforeCount} to ${report.cleanup.afterCount}`);
+  }
+  if (report.cleanup.deleteResults && report.cleanup.deleteResults.some(item => !item.ok)) {
+    report.failures.push('temporary session cleanup failed');
+  }
+  report.pass = report.failures.length === 0;
+
+  const reportPath = writeJson('final-ux-acceptance-report.json', report);
+  const summary = {
+    generatedAt: report.generatedAt,
+    report: reportPath,
+    checks: report.checks,
+    cleanup: report.cleanup,
+    failures: report.failures,
+    pass: report.pass
+  };
+  writeJson('final-ux-acceptance-summary.json', summary);
+
+  if (!report.pass) {
+    console.error(`Final UX acceptance failed. Report: ${reportPath}`);
+    for (const failure of report.failures) console.error(`  - ${failure}`);
+    process.exit(1);
+  }
+  console.log(`Final UX acceptance passed. Report: ${reportPath}`);
+}
+
+main().catch(err => {
+  console.error(compactMessage(err.stack || err.message || err));
+  process.exit(1);
+});

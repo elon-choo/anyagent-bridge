@@ -46,7 +46,8 @@
   ],
   "scripts": {
     "start": "node server/index.js",
-    "test": "node test/stage4-smoke.js && node test/stage4-boot.js"
+    "test": "node test/stage4-smoke.js && node test/stage4-boot.js",
+    "test:ux-final": "node test/final-ux-acceptance.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
