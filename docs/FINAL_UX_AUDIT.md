@@ -2,7 +2,7 @@
 
 Date: 2026-07-01
 
-This audit summarizes the current AnyAgent Bridge UX upgrade state after 27 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
+This audit summarizes the current AnyAgent Bridge UX upgrade state after 28 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
 
 ## Current Status
 
@@ -31,11 +31,11 @@ Latest automated evidence:
 | Prefer client-only, avoid server churn | UX rounds changed `client/`, `public/`, `.gitignore`, and docs; final `git diff --stat -- server/` is empty. | Verified |
 | Secret safety | Patch-level secret scans are clean; `.data/`, `.env`, `.env.local`, `.vercel/`, `.npmrc`, and generated local state remain ignored. | Verified |
 | No package release performed | No package release command was run. | Verified |
-| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 41 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, physical-phone evidence capture, audit reproducibility, phone-smoke readiness, mobile file-preview verification, session-switch acceptance, session draft isolation, and stricter toolbar touch-target evidence. | Verified |
-| Implement prioritized improvements in small rounds | Rounds 1-27 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
+| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 42 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, physical-phone evidence capture, audit reproducibility, phone-smoke readiness, mobile file-preview verification, session-switch acceptance, session draft isolation, stricter toolbar touch-target evidence, and phone landscape touch ergonomics. | Verified |
+| Implement prioritized improvements in small rounds | Rounds 1-28 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
 | Beginners can send the first mobile command within 3 taps | Final local 320px and funnel 390px checks show fresh starter visible, `pwd` sends with one tap, output appears, and starter closes. | Verified |
-| 320-1440px layouts do not break | Final acceptance covers local app at 1440 and 320, funnel at 390, landing at 1440/390/320; horizontal overflow 0. | Verified |
-| Touch targets are sufficient | Final acceptance now requires mobile starter, launch-assist, Files editbar, local 320px toolbar, and funnel 390px toolbar controls to measure 44px+. | Verified |
+| 320-1440px layouts do not break | Final acceptance covers local app at 1440, 844x390 landscape, and 320 portrait, funnel at 390, landing at 1440/390/320; horizontal overflow 0. | Verified |
+| Touch targets are sufficient | Final acceptance now requires mobile starter, launch-assist, Files editbar, local 320px toolbar, local 844x390 landscape toolbar, and funnel 390px toolbar controls to measure 44px+. | Verified |
 | Agent launch prompt remains usable on 320px | Final local 320px run observes `startAgent`, compact launch assist, Esc and Ctrl-C input frames, and 44px+ assist buttons. | Verified |
 | Reconnect preserves usable state | Final desktop run switches sessions, restores per-session compose drafts, returns to the original output, then forces offline/online and returns from `offline` to `connected`. | Verified |
 | WebSocket frames match intended actions | Final run observes `sendToAgent`, `input`, and `startAgent` frames for desktop/mobile/funnel flows. | Verified |
@@ -49,7 +49,7 @@ Latest automated evidence:
 
 ## Finding Status Summary
 
-All 41 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
+All 42 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
 
 | Range | Area | Status |
 |---|---|---|
@@ -60,7 +60,7 @@ All 41 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Ver
 | 16-19 | Missing env noise, CDN fallbacks, PWA icon availability, offline state | Implemented / Verified OK |
 | 20-23 | File dialogs, notification modes, exposure badge, Markdown fallback | Implemented |
 | 24-28 | Reduced motion, quick commands, command history, session row actions, mobile preview | Implemented |
-| 29-41 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template, reproducible final acceptance, phone-smoke preflight, mobile file preview acceptance, session-switch acceptance, session draft isolation, stricter toolbar touch-target acceptance | Implemented |
+| 29-42 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template, reproducible final acceptance, phone-smoke preflight, mobile file preview acceptance, session-switch acceptance, session draft isolation, stricter toolbar touch-target acceptance, phone landscape touch ergonomics | Implemented |
 
 ## Final Automated Acceptance
 
@@ -74,6 +74,7 @@ Automated app scope:
 
 - Local desktop 1440x900: fresh starter, manual `sendToAgent`, terminal output, image attach, Esc key frame, Sessions new-session/switch-back, per-session compose draft isolation, all major modals, offline/online reconnect.
 - Local mobile 320x720: fresh starter, one-tap `pwd`, real `startAgent`, compact launch assist, Esc and Ctrl-C frames, 44px+ toolbar controls, no horizontal overflow.
+- Local mobile landscape 844x390: fresh starter, one-tap `pwd`, 44px+ toolbar controls, no horizontal overflow, usable terminal area.
 - Local mobile Files 390x844: temporary project fixture, Markdown open through Files UI, Preview mode, sanitized output, 44px+ editbar controls, no horizontal overflow, fixture cleanup.
 - Tailscale funnel mobile 390x844: public URL reachable, fresh starter, one-tap `pwd`, output visible, 44px+ toolbar controls, no horizontal overflow.
 - Production landing: 1440x900, 390x844, and 320x720, all images loaded, no horizontal overflow, touch-safe CTAs, feature markers present.
@@ -81,8 +82,9 @@ Automated app scope:
 
 Cleanup evidence:
 
-- Latest reproducible final acceptance created sessions 241, 242, 243, 244, and 245 and deleted them; session count returned from 37 to 37.
-- The latest run passed `localMobile320.toolbarTouch: true` and `funnelMobile390.toolbarTouch: true`; every visible toolbar control in both flows measured at least 44x44.
+- Latest reproducible final acceptance created sessions 247, 248, 249, 250, 251, and 252 and deleted them; session count returned from 37 to 37.
+- The latest run passed `localMobileLandscape844.toolbarTouch: true`, `oneTapFirstCommand: true`, `noOverflow: true`, and `terminalUsable: true`; every visible landscape toolbar control measured at least 44x44 and the terminal area measured 844x96.
+- The latest run passed `localMobile320.toolbarTouch: true` and `funnelMobile390.toolbarTouch: true`; every visible toolbar control in both portrait mobile flows measured at least 44x44.
 - The desktop session-switch check verified distinct session ids, ran `echo FINAL_SWITCH_SECOND`, switched back, restored `FINAL_DESKTOP`, restored the first session's uploaded image draft, kept the second session initially clean, and restored the second session's unsent draft only in that second session.
 
 ## Residual Risk

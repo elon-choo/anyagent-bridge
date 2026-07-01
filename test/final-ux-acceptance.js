@@ -509,6 +509,27 @@ async function localMobileFlow(browser, state) {
   return { initialSession: tracker.sessionIds[0] || null, tracker, initial, afterFirstCommand, launchAssist };
 }
 
+async function localMobileLandscapeFlow(browser, state) {
+  const context = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-mobile-landscape-844');
+  await openApp(page, BASE_URL);
+  const initial = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-mobile-landscape-844-starter.png'), fullPage: true });
+
+  await page.click('#starterPanel button[data-starter-cmd="pwd"]');
+  await waitFor(page, () => document.body.innerText.includes('/Users/'), null, 'landscape pwd output', 15000);
+  const afterFirstCommand = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-mobile-landscape-844-after.png'), fullPage: true });
+
+  await context.close();
+  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, afterFirstCommand };
+}
+
 async function setupFileFixture(state) {
   const id = `${Date.now()}-${process.pid}`;
   const dir = path.join(ROOT, 'uploads', 'ux-final-files', id);
@@ -775,6 +796,7 @@ async function cleanupArtifacts(state) {
 function buildChecks(report) {
   const desktop = report.flows.localDesktop;
   const mobile = report.flows.localMobile320;
+  const landscape = report.flows.localMobileLandscape844;
   const files = report.flows.mobileFiles390;
   const funnel = report.flows.funnelMobile390;
   const landing = report.landingProduction;
@@ -825,6 +847,15 @@ function buildChecks(report) {
       startAndKeys: hasSent(mobile.tracker, 'startAgent') &&
         hasSent(mobile.tracker, 'input', item => item.data === '\x1b') &&
         hasSent(mobile.tracker, 'input', item => item.data === '\x03')
+    },
+    localMobileLandscape844: {
+      newSession: !!landscape.initialSession,
+      starterOpen: !!landscape.initial.starterOpen,
+      starterTouch: landscape.initial.starterButtonsSafe44,
+      oneTapFirstCommand: hasSent(landscape.tracker, 'sendToAgent', item => item.text === 'pwd') && landscape.afterFirstCommand.bodyHasHome,
+      noOverflow: !landscape.initial.overflowX && !landscape.afterFirstCommand.overflowX,
+      toolbarTouch: landscape.initial.toolbarTouchSafe44,
+      terminalUsable: landscape.initial.termwrapRect && landscape.initial.termwrapRect.h >= 96
     },
     mobileFiles390: {
       newSession: !!files.initialSession,
@@ -906,6 +937,7 @@ async function main() {
     browser = await chromium.launch();
     report.flows.localDesktop = await localDesktopFlow(browser, state);
     report.flows.localMobile320 = await localMobileFlow(browser, state);
+    report.flows.localMobileLandscape844 = await localMobileLandscapeFlow(browser, state);
     report.flows.mobileFiles390 = await mobileFilesFlow(browser, state);
     report.flows.funnelMobile390 = await funnelMobileFlow(browser, state);
     report.landingProduction = await landingAudit(browser, state);
@@ -928,7 +960,7 @@ async function main() {
     report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMobileLandscape844 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),

@@ -52,6 +52,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 39 | The tracked final acceptance still only implied Sessions coverage through modal accessibility, leaving new-session and switch-back behavior easy to regress. | 4 | 5 | 20 | Implemented | Round 25 adds a desktop Sessions flow to `test/final-ux-acceptance.js`: create a second session from the modal, run a command there, switch back to the first session, verify original output, and clean all temp sessions. |
 | 40 | The tracked final acceptance still did not prove unsent compose/image drafts stay isolated while switching sessions. | 5 | 5 | 25 | Implemented | Round 26 extends the desktop Sessions flow to verify the first session's uploaded image draft restores, a new session starts clean, and the second session's unsent draft restores only in that second session. |
 | 41 | The tracked final acceptance still accepted mobile toolbar controls below the stated 44px phone target. | 4 | 5 | 20 | Implemented | Round 27 tightens `test/final-ux-acceptance.js` so local 320px and funnel 390px toolbar controls must all measure 44x44 or larger. |
+| 42 | Phone landscape width bypassed the mobile touch-target rules, making toolbar and dock controls as short as 15-35px at 844x390. | 4 | 5 | 20 | Implemented | Round 28 applies mobile touch rules to short landscape viewports and adds a tracked 844x390 landscape flow to final acceptance. |
 
 Round 1 verification:
 
@@ -337,3 +338,11 @@ Round 27 evidence:
 - The final acceptance runner now fails if any visible local 320px or funnel 390px toolbar control is below 44px wide or 44px high.
 - Latest `npm run test:ux-final` passed with `localMobile320.toolbarTouch: true` and `funnelMobile390.toolbarTouch: true`; measured toolbar controls were all 44px+.
 - Temporary sessions 241, 242, 243, 244, and 245 were deleted; session count returned from 37 to 37.
+
+Round 28 evidence:
+
+- Focused landscape probe before the fix at 844x390 found no horizontal overflow and one-tap `pwd` worked, but toolbar controls measured only 15-35px high.
+- Extended the mobile CSS media rules to also apply at `max-width: 900px` and `max-height: 520px`, covering phone landscape without changing server behavior.
+- Added `localMobileLandscape844` to `test/final-ux-acceptance.js`.
+- Latest `npm run test:ux-final` passed with `localMobileLandscape844.toolbarTouch: true`, `oneTapFirstCommand: true`, `noOverflow: true`, and `terminalUsable: true`; the landscape terminal measured 844x96 and every visible toolbar control measured 44px+.
+- Temporary sessions 247, 248, 249, 250, 251, and 252 were deleted; session count returned from 37 to 37.
