@@ -42,6 +42,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 29 | File editor still used native dialogs for dirty-file close/switch, overwrite after a file changed on disk, and file errors. | 4 | 5 | 20 | Implemented | Round 11 routes dirty/discard, overwrite, and file-error states through the in-app file action sheet; native dialogs 0 in focused test. |
 | 30 | Notification setup failures used native browser alerts and had no accessible in-app status. | 4 | 5 | 20 | Implemented | Round 12 routes permission/VAPID/subscribe/setup results through the shared toast; denied-permission focused test had native dialogs 0. |
 | 31 | Major overlays looked modal but lacked dialog semantics and left focus on toolbar buttons behind them. | 3 | 5 | 15 | Implemented | Round 14 adds dialog/label/modal ARIA wiring and initial focus for Connect, Projects, Secrets, Files, file actions, and Sessions. |
+| 32 | Modal focus could still escape with Tab, and closing overlays did not restore focus to the opener. | 3 | 5 | 15 | Implemented | Round 15 adds shared modal focus containment and opener restoration for Connect, Projects, Secrets, Files, file actions, and Sessions. |
 
 Round 1 verification:
 
@@ -216,3 +217,14 @@ Round 14 evidence:
 - Full 320/390 audit: Connect dialog role/label/focus verified, 0 audited controls under 44px, toolbar hidden controls 0, horizontal document overflow 0, native dialogs 0.
 - Test cleanup removed temp sessions 149, 150, 151, 152, 153, and 154 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round14/full/`.
+
+Round 15 evidence:
+
+- Before focused modal focus probe: Shift+Tab from Connect close escaped to `composeSend`, closing Connect/Sessions/Files left focus on the document, and Shift+Tab from file-action input escaped to the Files delete button.
+- Added a shared modal focus helper that records the opener, moves focus into the dialog on open, traps Tab/Shift+Tab in the topmost open dialog, keeps nested file-action prompts contained, and restores focus to the opener on close.
+- Focused after probe: Connect Shift+Tab stayed inside and close restored `connectBtn`; Sessions Tab loop stayed inside and close restored `sessBtn`; file-action Shift+Tab stayed inside `fxDialog`, cancel restored `fxNewFile`, and closing Files restored `filesBtn`.
+- Focused after report/screenshot: `/tmp/anyagent-bridge-ux-round15/after/focus-report.json`, `/tmp/anyagent-bridge-ux-round15/after/focus-after.png`.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, real `startAgent`, `sendToAgent`, and raw `input` WebSocket frames, image attach, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, nested file action dialog, and notification-control visibility all passed.
+- Full 320/390/1440 audit: horizontal document overflow 0, 320px page errors 0, 390px page errors 0, desktop page errors 0.
+- Test cleanup removed temp sessions 163 and 164 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round15/full/`.
