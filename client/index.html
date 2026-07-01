@@ -395,6 +395,9 @@
   #sessModal .sub { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
   #sessModal .pm-close { position: absolute; top: 12px; right: 14px; background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; }
   #sessModal .pm-close:hover { color: var(--fg); }
+  #sessModal .sx-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+  #sessModal .sx-filter { flex: 1 1 auto; width: 100%; min-width: 0; }
+  #sessModal .sx-count { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
   #sessModal .sx-list { list-style: none; margin: 0 0 12px; padding: 0; }
   #sessModal .sx-item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 7px; cursor: pointer; }
   #sessModal .sx-item:hover { background: #0d1117; }
@@ -448,6 +451,9 @@
     #composebar { padding: 8px; }
     #composebar .attach, #composeSend { min-width: 44px; min-height: 44px; }
     #composeInput { min-height: 44px; }
+    #sessModal .sx-tools { align-items: stretch; }
+    #sessModal .sx-filter { min-height: 44px; }
+    #sessModal .sx-count { display: inline-flex; align-items: center; min-height: 44px; }
     #sessModal .sx-item { padding: 8px; gap: 8px; }
     #sessModal .sx-act button,
     #sessModal .sx-mini { min-width: 44px; min-height: 44px; }
@@ -511,6 +517,10 @@
     <button class="pm-close" id="sessClose" aria-label="Close">×</button>
     <h2>Sessions</h2>
     <p class="sub">Each session is a terminal that keeps running on your computer. Switch between them, rename, or close.</p>
+    <div class="sx-tools">
+      <input class="sx-filter" id="sxFilter" type="search" placeholder="Search sessions" aria-label="Search sessions" autocomplete="off" spellcheck="false" />
+      <span class="sx-count" id="sxCount"></span>
+    </div>
     <ul class="sx-list" id="sxList"></ul>
     <p class="sx-empty" id="sxEmpty" style="display:none">No other sessions.</p>
     <button class="primary sx-new" id="sxNew">＋ New session</button>
@@ -1815,10 +1825,11 @@
   (function setupDock() {
     const dock = $("dock"), quickbar = $("quickbar"), keybar = $("keybar"), dockToggle = $("dockToggle");
     const ci = $("composeInput"), sendBtn = $("composeSend"), attachBtn = $("composeAttach"), imgFile = $("imgFile");
-    const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList");
+    const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList"), sxFilter = $("sxFilter"), sxCount = $("sxCount");
     let draftSessionKey = null;
     let historyIndex = -1;
     const commandHistory = Object.create(null);
+    let sessionList = [];
 
     // ---- toast ----
     let toastT = null;
@@ -2006,24 +2017,67 @@
     function hardReconnect() {
       reconnectNow(true);
     }
-    async function loadSessions() {
+    function sessionName(s) {
+      return s.displayName || s.projectName || ("Session " + s.sessionId);
+    }
+    function sessionAge(ts) {
+      const n = Number(ts);
+      if (!n) return "unknown";
+      const diff = Math.max(0, Date.now() - n);
+      if (diff < 60000) return "now";
+      const mins = Math.floor(diff / 60000);
+      if (mins < 60) return mins + "m ago";
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + "h ago";
+      return Math.floor(hrs / 24) + "d ago";
+    }
+    function sessionSearchText(s) {
+      return [
+        sessionName(s),
+        s.projectPath || "",
+        s.projectName || "",
+        s.activeAgentId || "",
+        s.sessionId || ""
+      ].join(" ").toLowerCase();
+    }
+    function sortedSessions(list) {
+      return list.slice().sort((a, b) => {
+        const ac = a.sessionId === currentSessionId;
+        const bc = b.sessionId === currentSessionId;
+        if (ac !== bc) return ac ? -1 : 1;
+        const at = Number(a.lastActivity || a.createdAt || 0);
+        const bt = Number(b.lastActivity || b.createdAt || 0);
+        if (at !== bt) return bt - at;
+        return (Number(b.sessionId) || 0) - (Number(a.sessionId) || 0);
+      });
+    }
+    function sessionCountText(n) {
+      return n + (n === 1 ? " session" : " sessions");
+    }
+    function renderSessions() {
       sxList.innerHTML = "";
-      let list = [];
-      try { const d = await api("/api/sessions"); list = d.sessions || []; } catch (_) {}
-      $("sxEmpty").style.display = list.length ? "none" : "";
-      for (const s of list) {
+      const q = (sxFilter && sxFilter.value || "").trim().toLowerCase();
+      const ordered = sortedSessions(sessionList);
+      const shown = q ? ordered.filter((s) => sessionSearchText(s).indexOf(q) !== -1) : ordered;
+      if (sxCount) sxCount.textContent = sessionList.length ? (q ? (shown.length + "/" + sessionList.length + " shown") : sessionCountText(sessionList.length)) : "0 sessions";
+      const empty = $("sxEmpty");
+      empty.textContent = sessionList.length ? "No matching sessions." : "No sessions.";
+      empty.style.display = shown.length ? "none" : "";
+      for (const s of shown) {
         const li = document.createElement("li");
         li.className = "sx-item" + (s.sessionId === currentSessionId ? " cur" : "");
         li.dataset.sessionId = String(s.sessionId);
         const dot = document.createElement("span"); dot.className = "sx-dot";
         // only accept a safe color literal (hex / rgb / keyword) — never url(...) etc.
         if (s.color && /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|rgba?\([\d.,\s%]+\))$/.test(s.color)) dot.style.background = s.color;
-        const displayName = s.displayName || s.projectName || ("Session " + s.sessionId);
+        const displayName = sessionName(s);
         const meta = document.createElement("div"); meta.className = "sx-meta";
         const nm = document.createElement("div"); nm.className = "sx-nm";
         nm.textContent = displayName;
         const sub = document.createElement("div"); sub.className = "sx-sub";
-        sub.textContent = (s.projectPath || "~") + (s.agentName ? "  ·  " + s.agentName : "");
+        const subBits = [s.projectPath || "~", sessionAge(s.lastActivity || s.createdAt)];
+        if (s.activeAgentId) subBits.splice(1, 0, "agent: " + s.activeAgentId);
+        sub.textContent = subBits.join(" - ");
         meta.appendChild(nm); meta.appendChild(sub);
         const act = document.createElement("div"); act.className = "sx-act";
         if (s.sessionId === currentSessionId) { const bg = document.createElement("span"); bg.className = "sx-cur-badge"; bg.textContent = "current"; act.appendChild(bg); }
@@ -2041,6 +2095,10 @@
         });
         sxList.appendChild(li);
       }
+    }
+    async function loadSessions() {
+      try { const d = await api("/api/sessions"); sessionList = d.sessions || []; } catch (_) { sessionList = []; }
+      renderSessions();
     }
     function switchSession(id) {
       if (id === currentSessionId) { closeSess(); return; }
@@ -2138,11 +2196,18 @@
       if (s.sessionId === currentSessionId) { targetSessionId = null; hardReconnect(); }
       loadSessions();
     }
-    function openSess() { sessModal.classList.add("open"); loadSessions(); }
-    function closeSess() { sessModal.classList.remove("open"); }
+    function clearSessionFilter() {
+      if (!sxFilter) return;
+      if (!sxFilter.value) return;
+      sxFilter.value = "";
+      renderSessions();
+    }
+    function openSess() { clearSessionFilter(); sessModal.classList.add("open"); loadSessions(); }
+    function closeSess() { sessModal.classList.remove("open"); clearSessionFilter(); }
     $("sessBtn").addEventListener("click", openSess);
     $("sessClose").addEventListener("click", closeSess);
     $("sxNew").addEventListener("click", newSession);
+    sxFilter.addEventListener("input", renderSessions);
     sessModal.addEventListener("click", (e) => { if (e.target === sessModal) closeSess(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && sessModal.classList.contains("open")) closeSess(); });
     onSessionReady = () => { restoreComposeDraft(); if (sessModal.classList.contains("open")) loadSessions(); };

@@ -24,7 +24,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 11 | The UI reports `connected` before the server `ready` frame. | 3 | 4 | 12 | Implemented | Round 3 changed socket-open status to `attaching...`; `connected` is set only after server `ready`. |
 | 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Partially implemented | Round 4 added safe one-tap command chips (`pwd`, `ls`, `git status`, `whoami`) above the mobile input dock. |
 | 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Implemented | Round 6 wraps the mobile toolbar into ordered rows so all primary controls are visible without horizontal scrolling. |
-| 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Backlog | Before test observed 38 session rows. |
+| 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Implemented | Round 8 added search/count, current/recent-first ordering, and activity hints; filter test narrowed 37 rows to 1. |
 | 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Backlog | After 320 screenshot shows Claude trust prompt filling terminal. |
 | 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Backlog | After report has expected `.env.local` 404. |
 | 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Backlog | Code inspection of external script/style URLs. |
@@ -131,3 +131,14 @@ Round 7 evidence:
 - Full 320/390/mobile user-control touch-target audit: 0 audited controls under 44px.
 - Test cleanup returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round7/full/`.
+
+Round 8 evidence:
+
+- Before focused Sessions probe: 37 rows, no `#sxFilter`, no count, and the current attached session was buried below older unnamed sessions.
+- Added a search/count row to the Sessions modal, sorted the current session first and recent sessions next, and added compact activity hints from `lastActivity`.
+- Focused after probe: desktop/mobile page errors 0, native dialogs 0, current session 39 rendered first, mobile search input measured 44px tall, search for `39` narrowed 37 rows to 1, no-match showed `No matching sessions.`, closing/reopening reset the filter to all 37 rows, and session count stayed 37.
+- Full desktop/mobile flow: project-scoped agent start, manual `sendToAgent`, image attach, Tab special key, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, and session filter reset all passed.
+- Full flow page errors: desktop 0, mobile 0; mobile native dialogs: 0.
+- Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
+- Test cleanup removed temp sessions 111 and 112 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round8/full/`.
