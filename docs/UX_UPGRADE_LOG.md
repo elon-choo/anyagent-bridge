@@ -21,7 +21,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 8 | Selected project was not remembered across reloads. | 3 | 5 | 15 | Implemented | Stored selected project path with safe localStorage helpers. |
 | 9 | Image attachment path inserted into compose was not draft-persisted. | 3 | 5 | 15 | Implemented | Image path insert still passes and calls draft save. |
 | 10 | Switching sessions could carry unsent text into the wrong session. | 4 | 4 | 16 | Implemented | Draft is saved before switch/new session and restored per session id. |
-| 11 | The UI reports `connected` before the server `ready` frame. | 3 | 4 | 12 | Backlog | Focused test needed `ready` wait for last-session save. |
+| 11 | The UI reports `connected` before the server `ready` frame. | 3 | 4 | 12 | Implemented | Round 3 changed socket-open status to `attaching...`; `connected` is set only after server `ready`. |
 | 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Backlog | Home screenshots show a blank terminal after login. |
 | 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Backlog | After mobile screenshot shows `Connect` partially off-screen. |
 | 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Backlog | Before test observed 38 session rows. |
@@ -29,7 +29,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Backlog | After report has expected `.env.local` 404. |
 | 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Backlog | Code inspection of external script/style URLs. |
 | 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Verified OK | Round 2 confirmed `icon-192.png`, `icon-512.png`, and `icon-maskable-512.png` are tracked and served with 200. |
-| 19 | Reconnect/offline state can remain visually `connected` briefly after network loss. | 3 | 3 | 9 | Backlog | Before offline probe still read `connected` after 900ms. |
+| 19 | Reconnect/offline state can remain visually `connected` briefly after network loss. | 3 | 3 | 9 | Implemented | Round 3 desktop/mobile forced-offline tests show immediate `offline`, still `offline` after delay, then `connected` after online restore. |
 | 20 | File creation, rename, and delete still rely on `prompt` / `confirm`, which is rough on mobile. | 3 | 3 | 9 | Backlog | Code inspection in file explorer handlers. |
 | 21 | Notification settings are one-button only; there is no quiet/noise control. | 3 | 3 | 9 | Backlog | Code inspection of push setup. |
 | 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Implemented | Round 2 added a persistent top-bar exposure badge: Local, Network, or Tunnel. |
@@ -62,3 +62,15 @@ Round 2 evidence:
 - Manifest/icon endpoints checked: `/manifest.webmanifest`, `/icon.svg`, `/icon-192.png`, `/icon-512.png`, and `/icon-maskable-512.png` returned 200.
 - Explicit SVG favicon link added; browser page load produced 0 HTTP errors and 0 console errors in the targeted mobile check.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round2/full/`.
+
+Round 3 evidence:
+
+- Before focused offline probe: mobile status stayed `connected` immediately and after 900ms of browser offline.
+- After focused offline probe: mobile status changed to `offline` immediately, stayed `offline` after 900ms, then returned to `connected` after online restore.
+- Full desktop/mobile flow: desktop `offline` immediately and after 900ms; mobile `offline` immediately and after 500ms; both returned to `connected`.
+- `connected` status is now assigned from the server `ready` frame, while WebSocket open shows `attaching...`.
+- Flow coverage remained: project-scoped agent start, `sendToAgent`, image attach, special key frame, session switch, forced reconnect.
+- Full flow page errors: desktop 0, mobile 0.
+- Mobile/320/390 touch-target audit: 0 audited controls under 44px.
+- Test cleanup returned the bridge to 37 sessions and 0 projects.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round3/full/`.

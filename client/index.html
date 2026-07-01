@@ -757,6 +757,20 @@
     connect();
   }
 
+  function markOffline() {
+    if (gate.style.display === "flex") return;
+    clearTimeout(reconnectTimer);
+    connected = false;
+    stopPing();
+    setStatus("disconnected", "offline");
+    if (ws) {
+      try {
+        ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close();
+      } catch (_) {}
+      ws = null;
+    }
+  }
+
   // ---------- WebSocket ----------
   function wsUrl() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -788,7 +802,7 @@
       connected = true;
       reconnectDelay = 1000;
       lastMsgAt = Date.now();   // baseline so the staleness watchdog has a start point (0 would never fire)
-      setStatus("connected", "connected");
+      setStatus("connecting", "attaching…");
       // initialize PTY with current geometry. When targetSessionId is set we attach
       // to that existing session (switch/resume); otherwise (undefined) the server
       // creates a fresh session — byte-identical to the original behavior.
@@ -841,6 +855,10 @@
   }
 
   function send(obj) {
+    if (navigator.onLine === false) {
+      markOffline();
+      return false;
+    }
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(obj));
       return true;
@@ -868,6 +886,7 @@
           storageSet(STORAGE.lastSession, String(msg.sessionId));
         }
         currentSessionProjectPath = msg.projectPath || null;
+        setStatus("connected", "connected");
         if (connected && term) send({ type: "resize", cols: term.cols, rows: term.rows });
         if (typeof onSessionReady === "function") onSessionReady();
         if (pendingAgentStartId) {
@@ -1816,6 +1835,7 @@
     }
     document.addEventListener("visibilitychange", () => { if (!document.hidden) maybeReconnect(); });
     window.addEventListener("online", maybeReconnect);
+    window.addEventListener("offline", markOffline);
     window.addEventListener("focus", maybeReconnect);
     // staleness watchdog: connected but silent too long → force a reconnect
     setInterval(() => {
