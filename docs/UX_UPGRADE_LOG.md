@@ -56,6 +56,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 43 | The tracked final acceptance did not prove the compose/send path remains reachable when a phone soft keyboard shrinks the viewport. | 5 | 5 | 25 | Implemented | Round 29 adds a 390px mobile keyboard-shrink flow that focuses compose, shrinks the viewport to 560px high, verifies input/send visibility and 44px controls, sends a command, and cleans the session. |
 | 44 | The tracked final acceptance did not prove the physical-smoke notification step: switching Quiet and back to Important with persistence on mobile. | 4 | 5 | 20 | Implemented | Round 30 adds a 390px mobile Notifications flow that switches Quiet, verifies it after reopening, switches Important, verifies it after reopening, and checks 44px+ mode controls. |
 | 45 | The tracked final acceptance did not prove simultaneous multi-viewer control: a second browser deep-linking to an existing session and both viewers receiving output. | 5 | 5 | 25 | Implemented | Round 31 adds a two-context multi-viewer flow: secondary opens `?session=<id>`, attaches to the same session, sends `echo FINAL_MULTIVIEW`, and both viewers see output. |
+| 46 | Reconnecting while scrolled up in terminal history jumped the user back to the top of server replayed scrollback. | 5 | 5 | 25 | Implemented | Round 32 captures the xterm viewport before unintended reconnects, restores it after same-session replay, and adds final acceptance that preserves `scrollTop` and visible rows across offline/online. |
 
 Round 1 verification:
 
@@ -373,3 +374,11 @@ Round 31 evidence:
 - Latest `npm run test:ux-final` passed with `localMultiViewer.sameSession`, `secondaryReconnect`, `secondaryUrlCleaned`, `secondaryNoStarter`, `secondarySendToAgent`, `primarySawOutput`, `secondarySawOutput`, and `noOverflow` all true.
 - The primary and secondary viewers both attached to session 280; screenshots were written to `/tmp/anyagent-bridge-final-audit/local-multiviewer-primary.png` and `/tmp/anyagent-bridge-final-audit/local-multiviewer-secondary.png`.
 - Temporary sessions 277, 278, 279, 280, 281, 282, 283, 284, and 285 were deleted; session count returned from 37 to 37.
+
+Round 32 evidence:
+
+- Focused before probe: after generating 140 terminal lines and scrolling up, offline/online reconnect changed the visible replay position from `scrollTop: 536` to `scrollTop: 0`; screenshots were written under `/tmp/anyagent-bridge-ux-round32-before/`.
+- Added client-side same-session terminal viewport capture/restore around unintended reconnects; intentional reset/new-session reconnects still clear the pending restore.
+- Extended `test/final-ux-acceptance.js` so the local desktop flow generates long scrollback, scrolls to a mid-history viewport, forces offline/online, and fails unless `scrollTop` and the first visible row are preserved.
+- Latest `npm run test:ux-final` passed with `localDesktop.scrollPositionPreserved: true`; the scroll snapshot stayed `scrollTop: 548` before and after reconnect, with top row `FINAL_SCROLL_33` before and after.
+- Temporary sessions 298, 299, 300, 301, 302, 303, 304, 305, and 306 were deleted; session count returned from 37 to 37.

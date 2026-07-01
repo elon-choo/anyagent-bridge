@@ -293,6 +293,36 @@ async function stateSnapshot(page) {
   });
 }
 
+async function terminalScrollSnapshot(page, target = null) {
+  if (target !== null) {
+    await page.evaluate((nextTarget) => {
+      const viewport = document.querySelector('#terminal .xterm-viewport');
+      if (!viewport) return;
+      if (nextTarget === 'quarter') {
+        viewport.scrollTop = Math.round(viewport.scrollHeight * 0.25);
+        viewport.dispatchEvent(new Event('scroll'));
+      } else if (typeof nextTarget === 'number') {
+        viewport.scrollTop = nextTarget;
+        viewport.dispatchEvent(new Event('scroll'));
+      }
+    }, target);
+    await page.waitForTimeout(80);
+  }
+  return page.evaluate(() => {
+    const viewport = document.querySelector('#terminal .xterm-viewport');
+    if (!viewport) return { available: false };
+    return {
+      available: true,
+      scrollTop: Math.round(viewport.scrollTop),
+      scrollHeight: Math.round(viewport.scrollHeight),
+      clientHeight: Math.round(viewport.clientHeight),
+      topRows: Array.from(document.querySelectorAll('#terminal .xterm-rows div'))
+        .slice(0, 5)
+        .map(el => (el.textContent || '').trim())
+    };
+  });
+}
+
 async function keyboardSnapshot(page) {
   return page.evaluate(() => {
     const visible = (el) => {
@@ -503,6 +533,7 @@ async function verifySessionSwitch(page, tracker) {
   await waitForSessionRow(page, secondSession, 'current second session row');
 
   await switchToSession(page, tracker, firstSession, 'switch back');
+  await terminalScrollSnapshot(page, 0);
   await waitFor(page, () => document.body.innerText.includes('FINAL_DESKTOP'), null, 'original session output after switch back', 20000);
   await waitFor(page, expected => document.querySelector('#composeInput')?.value === expected, firstDraftBeforeSwitch, 'first session draft restore');
   const firstBody = await page.evaluate(() => document.body ? document.body.innerText : '');
@@ -555,6 +586,10 @@ async function localDesktopFlow(browser, state) {
   await page.click('#composeSend');
   await waitFor(page, () => document.body.innerText.includes('FINAL_DESKTOP'), null, 'FINAL_DESKTOP output', 15000);
 
+  await page.fill('#composeInput', 'for i in $(seq 1 140); do echo FINAL_SCROLL_$i; done');
+  await page.click('#composeSend');
+  await waitFor(page, () => document.body.innerText.includes('FINAL_SCROLL_140'), null, 'FINAL_SCROLL output', 20000);
+
   await page.setInputFiles('#imgFile', smallPngFile());
   await waitFor(page, () => /uploads\/.*pixel\.png/.test(document.querySelector('#composeInput')?.value || ''), null, 'image attach path');
 
@@ -564,16 +599,21 @@ async function localDesktopFlow(browser, state) {
   const sessionSwitch = await verifySessionSwitch(page, tracker);
   const modals = await verifyModals(page);
 
+  await page.waitForTimeout(500);
+  const scrollBeforeReconnect = await terminalScrollSnapshot(page, 'quarter');
+
   await context.setOffline(true);
   await waitForStatus(page, 'offline', 15000);
   const offline = await stateSnapshot(page);
   await context.setOffline(false);
   await waitForStatus(page, 'connected', 20000);
+  await page.waitForTimeout(500);
+  const scrollAfterReconnect = await terminalScrollSnapshot(page);
   const reconnected = await stateSnapshot(page);
   await page.screenshot({ path: path.join(OUT_DIR, 'local-desktop-after.png'), fullPage: true });
 
   await context.close();
-  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, sessionSwitch, modals, offline, reconnected };
+  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, sessionSwitch, modals, scrollBeforeReconnect, offline, scrollAfterReconnect, reconnected };
 }
 
 async function localMobileFlow(browser, state) {
@@ -1047,7 +1087,13 @@ function buildChecks(report) {
         item.opened.focusInside &&
         item.closed.restoredTo === item.closed.expected
       ),
-      reconnect: desktop.offline.status.includes('offline') && desktop.reconnected.status.includes('connected')
+      reconnect: desktop.offline.status.includes('offline') && desktop.reconnected.status.includes('connected'),
+      scrollPositionPreserved: desktop.scrollBeforeReconnect.available &&
+        desktop.scrollAfterReconnect.available &&
+        desktop.scrollBeforeReconnect.scrollHeight > desktop.scrollBeforeReconnect.clientHeight &&
+        desktop.scrollBeforeReconnect.scrollTop > 0 &&
+        Math.abs(desktop.scrollAfterReconnect.scrollTop - desktop.scrollBeforeReconnect.scrollTop) <= 30 &&
+        desktop.scrollAfterReconnect.topRows[0] === desktop.scrollBeforeReconnect.topRows[0]
     },
     localMobile320: {
       newSession: !!mobile.initialSession,

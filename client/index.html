@@ -828,6 +828,7 @@
   let hideFreshStarter = null;      // optional hook the dock module sets for first-use sessions
   let exposureTimer = null;
   let toastT = null;
+  let pendingTerminalScrollRestore = null;
 
   const STORAGE = {
     lastSession: "aab.lastSessionId",
@@ -1066,6 +1067,38 @@
     try { fitAddon && fitAddon.fit(); } catch (_) {}
   }
 
+  function terminalViewport() {
+    return document.querySelector("#terminal .xterm-viewport");
+  }
+
+  function captureTerminalScroll() {
+    const viewport = terminalViewport();
+    if (!viewport || !currentSessionId) return;
+    pendingTerminalScrollRestore = {
+      sessionId: String(currentSessionId),
+      scrollTop: viewport.scrollTop,
+      maxScroll: Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+    };
+  }
+
+  function restoreTerminalScrollNow() {
+    const restore = pendingTerminalScrollRestore;
+    const viewport = terminalViewport();
+    if (!restore || !viewport || String(currentSessionId || "") !== restore.sessionId) return;
+    const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    viewport.scrollTop = Math.min(restore.scrollTop, maxScroll);
+    viewport.dispatchEvent(new Event("scroll"));
+    if (Math.abs(viewport.scrollTop - Math.min(restore.scrollTop, maxScroll)) <= 2) {
+      pendingTerminalScrollRestore = null;
+    }
+  }
+
+  function restoreTerminalScrollSoon() {
+    requestAnimationFrame(() => requestAnimationFrame(restoreTerminalScrollNow));
+    setTimeout(restoreTerminalScrollNow, 80);
+    setTimeout(restoreTerminalScrollNow, 220);
+  }
+
   let resizeRaf = null;
   function onResize() {
     if (resizeRaf) cancelAnimationFrame(resizeRaf);
@@ -1085,6 +1118,8 @@
 
   function reconnectNow(resetTerminal) {
     if (gate.style.display === "flex") return;
+    if (resetTerminal) pendingTerminalScrollRestore = null;
+    else captureTerminalScroll();
     if (ws) {
       try {
         ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close();
@@ -1103,6 +1138,7 @@
     connected = false;
     stopPing();
     setStatus("disconnected", "offline");
+    captureTerminalScroll();
     if (ws) {
       try {
         ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close();
@@ -1177,6 +1213,7 @@
         return;
       }
       setStatus("disconnected", "reconnecting…");
+      captureTerminalScroll();
       scheduleReconnect();
     };
 
@@ -1229,6 +1266,7 @@
         setStatus("connected", "connected");
         if (connected && term) send({ type: "resize", cols: term.cols, rows: term.rows });
         if (typeof onSessionReady === "function") onSessionReady();
+        if (msg.isReconnect) restoreTerminalScrollSoon();
         if (!msg.isReconnect && !pendingAgentStartId && typeof showFreshStarter === "function") showFreshStarter();
         if (pendingAgentStartId) {
           const agentId = pendingAgentStartId;
