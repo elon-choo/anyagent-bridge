@@ -26,7 +26,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Implemented | Round 6 wraps the mobile toolbar into ordered rows so all primary controls are visible without horizontal scrolling. |
 | 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Implemented | Round 8 added search/count, current/recent-first ordering, and activity hints; filter test narrowed 37 rows to 1. |
 | 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Backlog | After 320 screenshot shows Claude trust prompt filling terminal. |
-| 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Backlog | After report has expected `.env.local` 404. |
+| 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Implemented | Round 9 probes the hidden file path with a 200 JSON endpoint before reading; missing/existing file tests produced console errors 0. |
 | 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Backlog | Code inspection of external script/style URLs. |
 | 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Verified OK | Round 2 confirmed `icon-192.png`, `icon-512.png`, and `icon-maskable-512.png` are tracked and served with 200. |
 | 19 | Reconnect/offline state can remain visually `connected` briefly after network loss. | 3 | 3 | 9 | Implemented | Round 3 desktop/mobile forced-offline tests show immediate `offline`, still `offline` after delay, then `connected` after online restore. |
@@ -142,3 +142,14 @@ Round 8 evidence:
 - Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
 - Test cleanup removed temp sessions 111 and 112 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round8/full/`.
+
+Round 9 evidence:
+
+- Before focused Secrets probe: opening a project with no `.env.local` showed the correct empty editable UI, but the browser logged `Failed to load resource: the server responded with a status of 404 (Not Found)`.
+- Changed Secrets loading to probe the exact hidden `.env.local` path through `/api/explorer/tree` first. Missing files now resolve through a 200 JSON response; existing files still use `/api/explorer/read` only after the probe proves a file is present.
+- Focused after probe: missing `.env.local` produced page errors 0, console errors 0, `/api/explorer/tree` 200, no read 404, editable empty state, and Save wrote `AAB_R9_KEY=alpha`.
+- Existing `.env.local` probe: page errors 0, console errors 0, `/api/explorer/tree` 200, `/api/explorer/read` 200, one masked `SAFE_KEY` row rendered, and file contents stayed `SAFE_KEY=alpha`.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, project-scoped agent start, manual `sendToAgent`, image attach, Tab special key, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, and missing-env Secrets state all passed.
+- Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
+- Test cleanup removed temp sessions 115 and 116 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round9/full/`.

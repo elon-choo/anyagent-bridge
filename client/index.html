@@ -1450,7 +1450,32 @@
     $("secErr").textContent = "";
     secRaw = "";
     secLoadFailed = false;
-    // Distinguish "no file yet" (404 → a fresh file is fine) from a real read failure.
+    // Probe the exact hidden file path without using the read endpoint first:
+    // /api/explorer/tree returns a 200 JSON error for "missing" or "not a directory",
+    // so a normal first-open state does not create a noisy browser 404.
+    let info;
+    try {
+      info = await api("/api/explorer/tree?path=" + encodeURIComponent(secPath));
+    } catch (e) {
+      secLoadFailed = true;
+      $("secErr").textContent = e && e.unauthorized
+        ? "Session expired — reload to log in again."
+        : "Couldn't reach the server — editing disabled so existing keys stay safe.";
+      secSetEnabled(false); secRender(); return;
+    }
+    if (info && info.error === "Path does not exist") {
+      secSetEnabled(true);
+      secRender();
+      return;
+    }
+    if (!info || info.error !== "Not a directory") {
+      secLoadFailed = true;
+      $("secErr").textContent = "Couldn't read this folder's .env.local — editing disabled so existing keys aren't overwritten.";
+      secSetEnabled(false); secRender(); return;
+    }
+
+    // Existing .env.local confirmed; read it. Any error here is real, not the
+    // normal "no file yet" state, so block writes rather than clobbering contents.
     // On any other error we do NOT know the current contents, so we block editing —
     // otherwise the next Save would write only the new key and wipe the rest.
     let res;
@@ -1462,9 +1487,7 @@
       $("secErr").textContent = "Couldn't reach the server — editing disabled so existing keys stay safe.";
       secSetEnabled(false); secRender(); return;
     }
-    if (res.status === 404) {
-      secRaw = "";                       // no .env.local yet
-    } else if (res.ok) {
+    if (res.ok) {
       const data = await res.json().catch(() => ({}));
       secRaw = typeof data.content === "string" ? data.content : "";
     } else {
