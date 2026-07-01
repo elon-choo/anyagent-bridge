@@ -282,9 +282,16 @@
   #fileExp .fx-row.up { color: var(--muted); }
   #fileExp .fx-row.active { background: rgba(47,129,247,.18); }
   #fileExp .fx-row .fx-nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #fileExp .fx-row .fx-act { opacity: 0; display: flex; gap: 3px; }
-  #fileExp .fx-row:hover .fx-act { opacity: 1; }
-  #fileExp .fx-row .fx-act button { background: transparent; border: none; cursor: pointer; font-size: 12px; padding: 0 2px; }
+  #fileExp .fx-row .fx-act { opacity: 0; display: flex; gap: 4px; }
+  #fileExp .fx-row:hover .fx-act,
+  #fileExp .fx-row:focus-within .fx-act { opacity: 1; }
+  #fileExp .fx-row .fx-act button {
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; border-radius: 7px; cursor: pointer;
+    font-size: 13px; padding: 0; color: var(--muted);
+  }
+  #fileExp .fx-row .fx-act button:hover { color: var(--fg); background: #21262d; }
+  #fileExp .fx-row .fx-act button.danger:hover { color: #ffb4ae; border-color: rgba(248,81,73,.55); }
   #fileExp .fx-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   #fileExp .fx-editbar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--bar); }
   #fileExp .fx-fname { font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -305,6 +312,16 @@
   .fx-prev ul, .fx-prev ol { padding-left: 1.4em; }
   .fx-prev table { border-collapse: collapse; } .fx-prev th, .fx-prev td { border: 1px solid var(--border); padding: 6px 10px; }
   .fx-prev img { max-width: 100%; }
+  #fileExp .fx-dialog { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; background: rgba(13,17,23,.72); padding: 18px; }
+  #fileExp .fx-dialog.open { display: flex; }
+  #fileExp .fx-dialog-card { width: 100%; max-width: 360px; background: var(--bar); border: 1px solid var(--border); border-radius: 8px; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.55); }
+  #fileExp .fx-dialog-card h3 { margin: 0 0 8px; font-size: 15px; }
+  #fileExp .fx-dialog-card p { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  #fileExp .fx-dialog-card input { width: 100%; margin-bottom: 8px; }
+  #fileExp .fx-dialog-err { min-height: 16px; color: var(--red) !important; font-size: 12px !important; margin: 0 0 10px !important; }
+  #fileExp .fx-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  #fileExp .fx-dialog-actions .danger { background: #21262d; border-color: rgba(248,81,73,.55); color: #ffb4ae; }
+  #fileExp .fx-dialog-actions .danger:hover { background: rgba(248,81,73,.12); border-color: var(--red); color: #ffc2bd; }
   @media (max-width: 760px) { #fileExp .fx-tree { width: 42%; } #fileExp .fx-prev { display: none !important; } }
 
   /* ---------- Mobile input dock: key bar + compose box ---------- */
@@ -437,6 +454,14 @@
     #sessModal .sx-edit,
     #sessModal .sx-confirm { gap: 8px; }
     #sessModal .sx-inline-actions { gap: 8px; }
+    #fileExp .fx-head { flex-wrap: wrap; gap: 8px; }
+    #fileExp .fx-tools { flex-wrap: wrap; }
+    #fileExp button.fx-btn { min-height: 44px; }
+    #fileExp .fx-row { min-height: 44px; }
+    #fileExp .fx-row .fx-act { opacity: 1; }
+    #fileExp .fx-row .fx-act button { min-width: 44px; min-height: 44px; }
+    #fileExp .fx-editbar { flex-wrap: wrap; }
+    #fileExp .fx-dialog-actions button { min-width: 44px; min-height: 44px; }
     #onboard .ob-close,
     #projModal .pm-close,
     #secModal .pm-close,
@@ -607,8 +632,8 @@
         </div>
         <button class="fx-btn primary" id="fxSave">Save</button>
         <button class="fx-btn" id="fxDownload" title="Download">⬇</button>
-        <button class="fx-btn" id="fxRename" title="Rename">✏</button>
-        <button class="fx-btn danger" id="fxDelete" title="Delete">🗑</button>
+        <button class="fx-btn" id="fxRename" title="Rename" aria-label="Rename file">✏</button>
+        <button class="fx-btn danger" id="fxDelete" title="Delete" aria-label="Delete file">🗑</button>
       </div>
       <div class="fx-edit" id="fxEdit">
         <div class="fx-empty" id="fxEmpty">← Pick a file to open it, or create a new one.</div>
@@ -616,6 +641,18 @@
         <div class="fx-prev" id="fxPrev" style="display:none"></div>
       </div>
     </div>
+  </div>
+  <div class="fx-dialog" id="fxDialog" aria-hidden="true">
+    <form class="fx-dialog-card" id="fxDialogForm">
+      <h3 id="fxDialogTitle">File action</h3>
+      <p id="fxDialogMsg"></p>
+      <input id="fxDialogInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <p class="fx-dialog-err" id="fxDialogErr"></p>
+      <div class="fx-dialog-actions">
+        <button type="button" id="fxDialogCancel">Cancel</button>
+        <button type="submit" class="primary" id="fxDialogOk">OK</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -1488,7 +1525,11 @@
     const fileExp = $("fileExp"), fxTree = $("fxTree"), fxCrumb = $("fxCrumb");
     const fxTa = $("fxTa"), fxPrev = $("fxPrev"), fxEmpty = $("fxEmpty");
     const fxEditbar = $("fxEditbar"), fxFname = $("fxFname"), fxModes = $("fxModes");
+    const fxDialog = $("fxDialog"), fxDialogForm = $("fxDialogForm"), fxDialogInput = $("fxDialogInput");
+    const fxDialogTitle = $("fxDialogTitle"), fxDialogMsg = $("fxDialogMsg"), fxDialogErr = $("fxDialogErr");
+    const fxDialogOk = $("fxDialogOk"), fxDialogCancel = $("fxDialogCancel");
     let fxCwd = null, fxFile = null, fxDirty = false, fxMode = "edit", mdReady = null, flashT = null, fxOpenedContent = null;
+    let fxDialogResolve = null, fxDialogValidate = null, fxDialogNeedsInput = false;
 
     function aFetch(p, opts) {
       opts = opts || {};
@@ -1497,6 +1538,56 @@
       return fetch(p, opts);
     }
     function onAuthErr() { closeFiles(true); showGate("Session expired — please log in again."); }
+    function cleanName(v) { return String(v || "").trim(); }
+    function validateName(name) {
+      if (!name) return "Enter a name.";
+      if (name === "." || name === "..") return "Use a real name.";
+      if (/[\/\\]/.test(name)) return "Name cannot include slashes.";
+      return "";
+    }
+    function closeFxDialog(value) {
+      if (!fxDialogResolve) return;
+      const resolve = fxDialogResolve;
+      fxDialogResolve = null;
+      fxDialogValidate = null;
+      fxDialog.classList.remove("open");
+      fxDialog.setAttribute("aria-hidden", "true");
+      fxDialogErr.textContent = "";
+      resolve(value);
+    }
+    function askFileAction(opts) {
+      opts = opts || {};
+      return new Promise((resolve) => {
+        fxDialogResolve = resolve;
+        fxDialogValidate = opts.validate || null;
+        fxDialogNeedsInput = !!opts.needsInput;
+        fxDialogTitle.textContent = opts.title || "File action";
+        fxDialogMsg.textContent = opts.message || "";
+        fxDialogInput.style.display = fxDialogNeedsInput ? "" : "none";
+        fxDialogInput.value = opts.value || "";
+        fxDialogInput.placeholder = opts.placeholder || "";
+        fxDialogErr.textContent = "";
+        fxDialogOk.textContent = opts.okText || "OK";
+        fxDialogOk.classList.toggle("danger", !!opts.danger);
+        fxDialog.classList.add("open");
+        fxDialog.setAttribute("aria-hidden", "false");
+        setTimeout(() => {
+          if (fxDialogNeedsInput) { fxDialogInput.focus(); fxDialogInput.select(); }
+          else fxDialogOk.focus();
+        }, 0);
+      });
+    }
+    fxDialogForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!fxDialogResolve) return;
+      if (!fxDialogNeedsInput) { closeFxDialog(true); return; }
+      const v = cleanName(fxDialogInput.value);
+      const err = fxDialogValidate ? fxDialogValidate(v) : "";
+      if (err) { fxDialogErr.textContent = err; fxDialogInput.focus(); return; }
+      closeFxDialog(v);
+    });
+    fxDialogCancel.addEventListener("click", () => closeFxDialog(null));
+    fxDialog.addEventListener("click", (e) => { if (e.target === fxDialog) closeFxDialog(null); });
 
     async function loadTree(p) {
       try {
@@ -1517,8 +1608,10 @@
           const nm = document.createElement("span"); nm.className = "fx-nm"; nm.textContent = it.name; row.appendChild(nm);
           const act = document.createElement("span"); act.className = "fx-act";
           const rn = document.createElement("button"); rn.textContent = "✏"; rn.title = "Rename";
+          rn.type = "button"; rn.setAttribute("aria-label", "Rename " + it.name);
           rn.addEventListener("click", (e) => { e.stopPropagation(); renameItem(it); });
           const dl = document.createElement("button"); dl.textContent = "🗑"; dl.title = "Delete";
+          dl.type = "button"; dl.className = "danger"; dl.setAttribute("aria-label", "Delete " + it.name);
           dl.addEventListener("click", (e) => { e.stopPropagation(); deleteItem(it); });
           act.appendChild(rn); act.appendChild(dl); row.appendChild(act);
           row.addEventListener("click", () => { if (it.isDirectory) loadTree(it.path); else openFile(it.path); });
@@ -1605,25 +1698,57 @@
     function flash(msg) { const s = $("fxSave"); const o = s.dataset.o || s.textContent; s.dataset.o = o; s.textContent = "✓ " + msg; clearTimeout(flashT); flashT = setTimeout(() => { s.textContent = o; }, 1200); }
 
     async function newFile() {
-      if (!fxCwd) return; const name = prompt("New file name (e.g. notes.md):"); if (!name) return;
+      if (!fxCwd) return;
+      const name = await askFileAction({
+        title: "New file",
+        message: "Create a file in the current folder.",
+        placeholder: "notes.md",
+        okText: "Create",
+        needsInput: true,
+        validate: validateName
+      });
+      if (!name) return;
       const p = fxCwd.replace(/\/$/, "") + "/" + name;
       const r = await aFetch("/api/file", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: p, content: "" }) });
       const d = await r.json(); if (d.success) { await loadTree(fxCwd); openFile(p); } else alert(d.error || "Could not create file");
     }
     async function newFolder() {
-      if (!fxCwd) return; const name = prompt("New folder name:"); if (!name) return;
+      if (!fxCwd) return;
+      const name = await askFileAction({
+        title: "New folder",
+        message: "Create a folder in the current folder.",
+        placeholder: "screenshots",
+        okText: "Create",
+        needsInput: true,
+        validate: validateName
+      });
+      if (!name) return;
       const p = fxCwd.replace(/\/$/, "") + "/" + name;
       const r = await aFetch("/api/folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: p }) });
       const d = await r.json(); if (d.success) loadTree(fxCwd); else alert(d.error || "Could not create folder");
     }
     async function renameItem(it) {
-      const nn = prompt("Rename to:", it.name); if (!nn || nn === it.name) return;
+      const nn = await askFileAction({
+        title: "Rename",
+        message: "Rename " + it.name + ".",
+        value: it.name,
+        okText: "Rename",
+        needsInput: true,
+        validate: validateName
+      });
+      if (!nn || nn === it.name) return;
       const np = it.path.slice(0, it.path.length - it.name.length) + nn;
       const r = await aFetch("/api/explorer/rename", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ oldPath: it.path, newPath: np }) });
       const d = await r.json(); if (d.success) { if (fxFile === it.path) { fxFile = np; fxFname.textContent = nn; } loadTree(fxCwd); } else alert(d.error || "Rename failed");
     }
     async function deleteItem(it) {
-      if (!confirm("Delete " + it.name + (it.isDirectory ? " and everything in it?" : "?"))) return;
+      const ok = await askFileAction({
+        title: "Delete",
+        message: "Delete " + it.name + (it.isDirectory ? " and everything in it?" : "?"),
+        okText: "Delete",
+        danger: true
+      });
+      if (!ok) return;
       const r = await aFetch("/api/file?path=" + encodeURIComponent(it.path), { method: "DELETE" });
       const d = await r.json();
       if (d.success) { if (fxFile === it.path) { fxFile = null; fxEditbar.style.display = "none"; fxTa.style.display = "none"; fxPrev.style.display = "none"; fxEmpty.style.display = ""; } loadTree(fxCwd); } else alert(d.error || "Delete failed");
@@ -1648,7 +1773,8 @@
     [].forEach.call(fxModes.children, (b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
     document.addEventListener("keydown", (e) => {
       if (!fileExp.classList.contains("open")) return;
-      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) { e.preventDefault(); save(); }
+      if (fxDialog.classList.contains("open") && e.key === "Escape") { e.preventDefault(); closeFxDialog(null); }
+      else if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) { e.preventDefault(); save(); }
       else if (e.key === "Escape" && document.activeElement !== fxTa) closeFiles(false);
     });
   })();

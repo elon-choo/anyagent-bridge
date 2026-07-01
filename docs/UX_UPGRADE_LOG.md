@@ -30,7 +30,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Backlog | Code inspection of external script/style URLs. |
 | 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Verified OK | Round 2 confirmed `icon-192.png`, `icon-512.png`, and `icon-maskable-512.png` are tracked and served with 200. |
 | 19 | Reconnect/offline state can remain visually `connected` briefly after network loss. | 3 | 3 | 9 | Implemented | Round 3 desktop/mobile forced-offline tests show immediate `offline`, still `offline` after delay, then `connected` after online restore. |
-| 20 | File creation, rename, and delete still rely on `prompt` / `confirm`, which is rough on mobile. | 3 | 3 | 9 | Backlog | Code inspection in file explorer handlers. |
+| 20 | File creation, rename, and delete still rely on `prompt` / `confirm`, which is rough on mobile. | 3 | 3 | 9 | Implemented | Round 7 replaces file create/folder/rename/delete dialogs with an in-app action sheet and makes row actions visible 44px+ targets on mobile. |
 | 21 | Notification settings are one-button only; there is no quiet/noise control. | 3 | 3 | 9 | Backlog | Code inspection of push setup. |
 | 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Implemented | Round 2 added a persistent top-bar exposure badge: Local, Network, or Tunnel. |
 | 23 | Markdown preview depends on runtime CDN loading. | 3 | 3 | 9 | Backlog | Code inspection of `loadMd()`. |
@@ -118,3 +118,16 @@ Round 6 evidence:
 - Full flow toolbar hidden controls: 0 at 320px, 390px, and mobile; with a selected project the toolbar measured 261px at 320px and 211px at 390px/mobile.
 - Test cleanup returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round6/full/`.
+
+Round 7 evidence:
+
+- Before focused Files probe: New file, New folder, Rename, and Delete produced native `prompt`/`confirm` dialogs; file row actions measured 15-19px, had opacity 0 on touch, and had no `aria-label`.
+- Replaced those file actions with an in-app dialog/action sheet and filename validation that rejects empty names, `.` / `..`, and slashes.
+- File row Rename/Delete actions now carry `aria-label`s and are visible 44px+ targets on mobile.
+- Focused after probe: native dialogs 0, page errors 0, slash validation message shown, file/folder creation succeeded on disk, rename moved the file, row delete removed the file, and cleanup returned to 37 sessions.
+- Full desktop/mobile flow: project-scoped agent start, quick/manual send frames, image attach, special key, session switch, forced reconnect, Projects/Secrets/Files/Connect/Sessions modals all passed.
+- Full flow page errors: desktop 0, mobile 0; mobile native dialogs: 0.
+- Mobile file row action audit: 0 controls under 44px, 0 missing `aria-label`s, and action opacity was `1` on touch.
+- Full 320/390/mobile user-control touch-target audit: 0 audited controls under 44px.
+- Test cleanup returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round7/full/`.
