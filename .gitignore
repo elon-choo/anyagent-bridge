@@ -7,3 +7,9 @@ uploads/
 *.log
 .DS_Store
 .npmrc
+
+# TWA Digital Asset Links (per-build signing fingerprint — not committed)
+client/.well-known/
+
+# Built TWA APK (per-build, signed — not committed)
+client/anyagent-bridge.apk

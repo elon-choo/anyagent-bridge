@@ -472,6 +472,16 @@ safety.installAuditMiddleware(app);
 // Mount /api/auth/* routes (login, OAuth, TOTP, sessions).
 auth.registerRoutes(app, { requireAuth });
 
+// Digital Asset Links — lets an installed Android app (TWA) verify it owns this
+// origin and run full-screen without an address bar. Must be public (the verifier
+// fetches it unauthenticated) and at this exact path; the static middleware below
+// ignores dotfiles, so serve it explicitly. 404s cleanly when no app is packaged.
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  const f = path.join(ROOT, 'client', '.well-known', 'assetlinks.json');
+  res.type('application/json');
+  res.sendFile(f, (err) => { if (err && !res.headersSent) res.status(404).end(); });
+});
+
 // Static client (no caching so updates are picked up immediately).
 app.use(express.static(path.join(ROOT, 'client'), {
   setHeaders: (res) => {
