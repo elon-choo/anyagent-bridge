@@ -2,7 +2,7 @@
 
 Date: 2026-07-02
 
-This audit summarizes the current AnyAgent Bridge UX upgrade state after 34 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
+This audit summarizes the current AnyAgent Bridge UX upgrade state after 35 focused rounds. The detailed finding table and per-round evidence live in `docs/UX_UPGRADE_LOG.md`; this file is the completion-oriented checklist and evidence index.
 
 ## Current Status
 
@@ -31,19 +31,20 @@ Latest automated evidence:
 | Prefer client-only, avoid server churn | UX rounds changed `client/`, `public/`, `.gitignore`, and docs; final `git diff --stat -- server/` is empty. | Verified |
 | Secret safety | Patch-level secret scans are clean; `.data/`, `.env`, `.env.local`, `.vercel/`, `.npmrc`, and generated local state remain ignored. | Verified |
 | No package release performed | No package release command was run. | Verified |
-| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 48 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, physical-phone evidence capture, audit reproducibility, phone-smoke readiness, mobile file-preview verification, session-switch acceptance, session draft isolation, stricter toolbar touch-target evidence, phone landscape touch ergonomics, soft-keyboard compose reachability, mobile notification mode persistence, simultaneous multi-viewer shared-session acceptance, reconnect scroll-position preservation, reload scroll-position preservation, and current-session close cleanup. | Verified |
-| Implement prioritized improvements in small rounds | Rounds 1-34 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
+| Find broad UX upgrade items | `docs/UX_UPGRADE_LOG.md` contains 49 findings across onboarding, mobile, sessions, files, notifications, accessibility, resilience, security visibility, landing, final auditability, physical-phone evidence capture, audit reproducibility, phone-smoke readiness, mobile file-preview verification, session-switch acceptance, session draft isolation, stricter toolbar touch-target evidence, phone landscape touch ergonomics, soft-keyboard compose reachability, mobile notification mode persistence, simultaneous multi-viewer shared-session acceptance, reconnect scroll-position preservation, reload scroll-position preservation, current-session close cleanup, and multiline compose history safety. | Verified |
+| Implement prioritized improvements in small rounds | Rounds 1-35 are committed with evidence in commit bodies and `docs/UX_UPGRADE_LOG.md`. | Verified |
 | Beginners can send the first mobile command within 3 taps | Final local 320px and funnel 390px checks show fresh starter visible, `pwd` sends with one tap, output appears, and starter closes. | Verified |
 | 320-1440px layouts do not break | Final acceptance covers local app at 1440, dual 1280x760 multi-viewer, 844x390 landscape, 390x560 keyboard-shrink, and 320 portrait, funnel at 390, landing at 1440/390/320; horizontal overflow 0. | Verified |
 | Touch targets are sufficient | Final acceptance now requires mobile starter, launch-assist, Files editbar, local 320px toolbar, local 844x390 landscape toolbar, and funnel 390px toolbar controls to measure 44px+. | Verified |
 | Agent launch prompt remains usable on 320px | Final local 320px run observes `startAgent`, compact launch assist, Esc and Ctrl-C input frames, and 44px+ assist buttons. | Verified |
 | Reconnect preserves usable state | Final desktop run switches sessions, restores per-session compose drafts, returns to the original output, scrolls terminal history to a mid-history row, then forces offline/online and returns from `offline` to `connected` without losing scroll position. | Verified |
 | Reconnect preserves scroll position | Final desktop run keeps `scrollTop: 548` and first visible row `FINAL_SCROLL_33` before and after same-session offline/online replay. | Verified |
-| Reload preserves scroll position | Final desktop run reloads the page, receives `ready` for the same session 322 with `isReconnect: true`, and keeps `scrollTop: 548` plus first visible row `FINAL_SCROLL_33`. | Verified |
-| Closing current session starts clean | Final close-current run seeds compose draft and scroll metadata, closes session 326 from the Sessions UI, verifies old local keys are gone, and verifies replacement session 327 starts with empty compose and no replacement draft. | Verified |
-| Simultaneous viewers share a session | Final local multi-viewer run deep-links a second browser context to session 325, verifies it attaches to the same session, sends `echo FINAL_MULTIVIEW` from the secondary view, and both viewers see output with no overflow. | Verified |
+| Reload preserves scroll position | Final desktop run reloads the page, receives `ready` for the same session 336 with `isReconnect: true`, and keeps `scrollTop: 548` plus first visible row `FINAL_SCROLL_33`. | Verified |
+| Multiline compose arrows do not overwrite drafts | Final desktop run verifies `FIRST LINE\nSECOND LINE` stays intact across ArrowUp/ArrowDown, while an empty single-line compose box still recalls the last command from history. | Verified |
+| Closing current session starts clean | Final close-current run seeds compose draft and scroll metadata, closes session 340 from the Sessions UI, verifies old local keys are gone, and verifies replacement session 341 starts with empty compose and no replacement draft. | Verified |
+| Simultaneous viewers share a session | Final local multi-viewer run deep-links a second browser context to session 339, verifies it attaches to the same session, sends `echo FINAL_MULTIVIEW` from the secondary view, and both viewers see output with no overflow. | Verified |
 | WebSocket frames match intended actions | Final run observes `sendToAgent`, `input`, and `startAgent` frames for desktop/mobile/funnel flows. | Verified |
-| Existing features still work | Final run covers compose send, keyboard-shrink send, simultaneous shared-session viewing/control, image attach, special key, Sessions new-session/switch-back/draft isolation/current-close cleanup, Connect, Projects, Secrets, Files, mobile Markdown preview, Notifications Quiet/Important mode persistence, reconnect, public funnel, and landing. PWA endpoints are also checked. | Verified by automation; real install pending phone smoke |
+| Existing features still work | Final run covers compose send, multiline compose navigation/history safety, keyboard-shrink send, simultaneous shared-session viewing/control, image attach, special key, Sessions new-session/switch-back/draft isolation/current-close cleanup, Connect, Projects, Secrets, Files, mobile Markdown preview, Notifications Quiet/Important mode persistence, reconnect, public funnel, and landing. PWA endpoints are also checked. | Verified by automation; real install pending phone smoke |
 | Native browser dialogs removed from UX-critical paths | Final scan for native `alert`, `confirm`, and `prompt` calls is empty in `client/index.html`, `client/sw.js`, and `public/index.html`. | Verified |
 | Accessibility: modals named, focus contained/restored | Final modal report verifies Connect, Projects, Secrets, Files, Notifications, and Sessions have dialog semantics, focus moves inside, and focus restores to opener. | Verified |
 | Notification noise controls exist | Round 16 verifies service-worker filtering; final acceptance now verifies mobile Quiet and Important selection persist after reopening, with 44px+ mode controls. | Verified |
@@ -53,7 +54,7 @@ Latest automated evidence:
 
 ## Finding Status Summary
 
-All 48 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
+All 49 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Verified OK` state:
 
 | Range | Area | Status |
 |---|---|---|
@@ -64,7 +65,7 @@ All 48 tracked findings in `docs/UX_UPGRADE_LOG.md` are in `Implemented` or `Ver
 | 16-19 | Missing env noise, CDN fallbacks, PWA icon availability, offline state | Implemented / Verified OK |
 | 20-23 | File dialogs, notification modes, exposure badge, Markdown fallback | Implemented |
 | 24-28 | Reduced motion, quick commands, command history, session row actions, mobile preview | Implemented |
-| 29-48 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template, reproducible final acceptance, phone-smoke preflight, mobile file preview acceptance, session-switch acceptance, session draft isolation, stricter toolbar touch-target acceptance, phone landscape touch ergonomics, soft-keyboard compose reachability, mobile notification mode persistence, simultaneous multi-viewer shared-session acceptance, reconnect scroll-position preservation, reload scroll-position preservation, current-session close cleanup | Implemented |
+| 29-49 | Dirty-file dialogs, notification setup toast, modal semantics/focus, public landing, final audit, phone-smoke report template, reproducible final acceptance, phone-smoke preflight, mobile file preview acceptance, session-switch acceptance, session draft isolation, stricter toolbar touch-target acceptance, phone landscape touch ergonomics, soft-keyboard compose reachability, mobile notification mode persistence, simultaneous multi-viewer shared-session acceptance, reconnect scroll-position preservation, reload scroll-position preservation, current-session close cleanup, multiline compose history safety | Implemented |
 
 ## Final Automated Acceptance
 
@@ -76,7 +77,7 @@ Before the required physical-phone smoke, run `npm run test:phone-preflight`. It
 
 Automated app scope:
 
-- Local desktop 1440x900: fresh starter, manual `sendToAgent`, terminal output, long scrollback, image attach, Esc key frame, Sessions new-session/switch-back, per-session compose draft isolation, all major modals, offline/online reconnect with scroll-position preservation, and full page reload with same-session scroll preservation.
+- Local desktop 1440x900: fresh starter, manual `sendToAgent`, terminal output, long scrollback, multiline compose ArrowUp/ArrowDown safety with single-line history recall preserved, image attach, Esc key frame, Sessions new-session/switch-back, per-session compose draft isolation, all major modals, offline/online reconnect with scroll-position preservation, and full page reload with same-session scroll preservation.
 - Local multi-viewer desktop 1280x760: secondary browser opens `?session=<id>`, reconnects to the same session, URL cleans, starter is not shown, secondary sends `echo FINAL_MULTIVIEW`, and both viewers see output with no horizontal overflow.
 - Local close-current desktop 1280x760: seeded compose draft and terminal scroll metadata are purged when closing the current session; replacement session starts with empty compose, no replacement draft, fresh starter, and no horizontal overflow.
 - Local mobile 320x720: fresh starter, one-tap `pwd`, real `startAgent`, compact launch assist, Esc and Ctrl-C frames, 44px+ toolbar controls, no horizontal overflow.
@@ -90,10 +91,11 @@ Automated app scope:
 
 Cleanup evidence:
 
-- Latest reproducible final acceptance created sessions 322, 323, 324, 325, 327, 328, 329, 330, 331, and 332 and deleted them; session 326 was closed through the UI; session count returned from 37 to 37.
-- The latest run passed `localDesktop.scrollPositionPreserved`, `reloadSameSession`, and `reloadScrollPositionPreserved`; the desktop terminal stayed at `scrollTop: 548` with first visible row `FINAL_SCROLL_33` before/after offline-online reconnect and before/after full reload of session 322.
-- The latest run passed `localCloseCurrent.replacementSession`, `draftSeeded`, `composeCleared`, `oldStatePurged`, `replacementStateClean`, `starterOpen`, and `noOverflow`; closing session 326 created clean replacement session 327.
-- The latest run passed `localMultiViewer.sameSession`, `secondaryReconnect`, `secondaryUrlCleaned`, `secondaryNoStarter`, `secondarySendToAgent`, `primarySawOutput`, `secondarySawOutput`, and `noOverflow`; both viewers attached to session 325 and rendered `FINAL_MULTIVIEW`.
+- Latest reproducible final acceptance created sessions 336, 337, 338, 339, 341, 342, 343, 344, 345, and 346 and deleted them; session 340 was closed through the UI; session count returned from 37 to 37.
+- The latest run passed `localDesktop.multilineHistorySafe`: `FIRST LINE\nSECOND LINE` stayed intact across ArrowUp/ArrowDown, and an empty single-line compose box still recalled `for i in $(seq 1 140); do echo FINAL_SCROLL_$i; done`.
+- The latest run passed `localDesktop.scrollPositionPreserved`, `reloadSameSession`, and `reloadScrollPositionPreserved`; the desktop terminal stayed at `scrollTop: 548` with first visible row `FINAL_SCROLL_33` before/after offline-online reconnect and before/after full reload of session 336.
+- The latest run passed `localCloseCurrent.replacementSession`, `draftSeeded`, `composeCleared`, `oldStatePurged`, `replacementStateClean`, `starterOpen`, and `noOverflow`; closing session 340 created clean replacement session 341.
+- The latest run passed `localMultiViewer.sameSession`, `secondaryReconnect`, `secondaryUrlCleaned`, `secondaryNoStarter`, `secondarySendToAgent`, `primarySawOutput`, `secondarySawOutput`, and `noOverflow`; both viewers attached to session 339 and rendered `FINAL_MULTIVIEW`.
 - The latest run passed `localMobileNotifications390.quietSelected`, `quietPersists`, `importantSelected`, `importantPersists`, `singleActiveMode`, `touchSafe`, and `noOverflow`; mode buttons measured 308x51.
 - The latest run passed `localMobileKeyboard390.focusedBeforeShrink`, `viewportShrank`, `composeVisible`, `sendVisible`, `controlsTouch`, `noOverflow`, `terminalUsable`, `sendToAgent`, and `outputSeen`; after shrinking to 390x560, terminal measured 390x216, compose input 250x44, and Send 66x44.
 - The latest run passed `localMobileLandscape844.toolbarTouch: true`, `oneTapFirstCommand: true`, `noOverflow: true`, and `terminalUsable: true`; every visible landscape toolbar control measured at least 44x44 and the terminal area measured 844x96.

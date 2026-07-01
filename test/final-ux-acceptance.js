@@ -491,6 +491,38 @@ async function composeValue(page) {
   return page.evaluate(() => document.querySelector('#composeInput')?.value || '');
 }
 
+async function verifyMultilineHistorySafety(page) {
+  const original = 'FIRST LINE\nSECOND LINE';
+  await page.fill('#composeInput', original);
+  await page.evaluate(() => {
+    const el = document.querySelector('#composeInput');
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  });
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(150);
+  const afterArrowUp = await composeValue(page);
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(150);
+  const afterArrowDown = await composeValue(page);
+
+  await page.fill('#composeInput', '');
+  await page.focus('#composeInput');
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(150);
+  const singleLineRecall = await composeValue(page);
+  await page.fill('#composeInput', '');
+
+  return {
+    original,
+    afterArrowUp,
+    afterArrowDown,
+    singleLineRecall,
+    multilinePreserved: afterArrowUp === original && afterArrowDown === original,
+    singleLineHistoryWorks: /^for i in /.test(singleLineRecall)
+  };
+}
+
 async function switchToSession(page, tracker, sessionId, label) {
   const readyIndex = tracker.received.length;
   await page.click(`#sxList .sx-item[data-session-id="${sessionId}"]`);
@@ -589,6 +621,7 @@ async function localDesktopFlow(browser, state) {
   await page.fill('#composeInput', 'for i in $(seq 1 140); do echo FINAL_SCROLL_$i; done');
   await page.click('#composeSend');
   await waitFor(page, () => document.body.innerText.includes('FINAL_SCROLL_140'), null, 'FINAL_SCROLL output', 20000);
+  const multilineHistory = await verifyMultilineHistorySafety(page);
 
   await page.setInputFiles('#imgFile', smallPngFile());
   await waitFor(page, () => /uploads\/.*pixel\.png/.test(document.querySelector('#composeInput')?.value || ''), null, 'image attach path');
@@ -630,6 +663,7 @@ async function localDesktopFlow(browser, state) {
     initialSession: tracker.sessionIds[0] || null,
     tracker,
     initial,
+    multilineHistory,
     sessionSwitch,
     modals,
     scrollBeforeReconnect,
@@ -1140,6 +1174,9 @@ function buildChecks(report) {
       outputSeen: desktop.reconnected.bodyHasFinalDesktop || hasReceived(desktop.tracker, 'output', item => /FINAL_DESKTOP/.test(item.sample || '')),
       imageAttached: /uploads\/.*pixel\.png/.test(desktop.offline.composeValue || desktop.reconnected.composeValue || ''),
       escInput: hasSent(desktop.tracker, 'input', item => item.data === '\x1b'),
+      multilineHistorySafe: desktop.multilineHistory &&
+        desktop.multilineHistory.multilinePreserved &&
+        desktop.multilineHistory.singleLineHistoryWorks,
       sessionSwitch: !!(desktop.sessionSwitch &&
         desktop.sessionSwitch.firstSession &&
         desktop.sessionSwitch.secondSession &&

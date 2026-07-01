@@ -59,6 +59,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 46 | Reconnecting while scrolled up in terminal history jumped the user back to the top of server replayed scrollback. | 5 | 5 | 25 | Implemented | Round 32 captures the xterm viewport before unintended reconnects, restores it after same-session replay, and adds final acceptance that preserves `scrollTop` and visible rows across offline/online. |
 | 47 | Reloading or restarting the app after scrolling terminal history did not restore the same visible terminal position. | 5 | 5 | 25 | Implemented | Round 33 stores terminal viewport per session, restores it after same-session reload replay, and adds final acceptance that reload preserves `scrollTop`, visible rows, and the same session id. |
 | 48 | Closing the current session could carry its unsent compose draft into the replacement session and leave old local draft/scroll keys behind. | 5 | 5 | 25 | Implemented | Round 34 purges closed-session local state, clears compose before replacement reconnect, and adds final acceptance for closing the current session from the Sessions UI. |
+| 49 | Compose command-history recall could overwrite pasted multiline prompts when ArrowUp or ArrowDown was meant to move inside the textarea. | 5 | 5 | 25 | Implemented | Round 35 keeps history recall for empty/single-line compose input but leaves multiline or selected text to native textarea navigation, with final acceptance coverage. |
 
 Round 1 verification:
 
@@ -400,3 +401,11 @@ Round 34 evidence:
 - Focused after probe: closing current session 320 created replacement 321 with empty compose, no old draft/scroll keys, and no replacement draft key; session count returned from 37 to 37.
 - Added `localCloseCurrent` to `test/final-ux-acceptance.js`; latest `npm run test:ux-final` passed `replacementSession`, `draftSeeded`, `composeCleared`, `oldStatePurged`, `replacementStateClean`, `starterOpen`, and `noOverflow`.
 - In the latest run, current session 326 was closed through the UI, replacement session 327 stayed clean, and temporary sessions 322, 323, 324, 325, 327, 328, 329, 330, 331, and 332 were deleted; session count returned from 37 to 37.
+
+Round 35 evidence:
+
+- Focused before probe: after seeding command history with `echo R35_HISTORY_ONE`, typing `ONE\nTWO` and pressing ArrowUp replaced the multiline draft with the previous single-line command.
+- Added a compose-history guard so ArrowUp/ArrowDown recall runs only for single-line input with no selected text; multiline prompts keep native textarea navigation.
+- Focused after probe: after seeding history with `echo R35_HISTORY_ONE`, typing `FIRST LINE\nSECOND LINE` and pressing ArrowUp preserved the multiline text exactly, while clearing the field and pressing ArrowUp still recalled `echo R35_HISTORY_ONE`; page errors were 0.
+- Extended `test/final-ux-acceptance.js` with `localDesktop.multilineHistorySafe`; latest `npm run test:ux-final` passed after preserving `FIRST LINE\nSECOND LINE` across ArrowUp/ArrowDown and still recalling `for i in $(seq 1 140); do echo FINAL_SCROLL_$i; done` from an empty single-line compose box.
+- In the latest run, desktop session 336 passed multiline history safety, reconnect/reload scroll preservation stayed at `scrollTop: 548` with top row `FINAL_SCROLL_33`, and temporary sessions 336, 337, 338, 339, 341, 342, 343, 344, 345, and 346 were deleted; session 340 was closed through the UI; session count returned from 37 to 37.

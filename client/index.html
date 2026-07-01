@@ -2345,6 +2345,11 @@
       saveComposeDraft();
       return true;
     }
+    function canRecallHistory() {
+      const value = ci.value || "";
+      if (typeof ci.selectionStart === "number" && typeof ci.selectionEnd === "number" && ci.selectionStart !== ci.selectionEnd) return false;
+      return value.indexOf("\n") === -1;
+    }
     function sendText(text) {
       if (!String(text || "").trim()) return false;
       if (!send({ type: "sendToAgent", text })) { toast("Not connected", true); return false; }
@@ -2518,9 +2523,9 @@
     ci.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !composing && !e.isComposing) { e.preventDefault(); sendCompose(); }
       else if (e.key === "ArrowUp" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !composing && !e.isComposing) {
-        if (recallHistory(-1)) e.preventDefault();
+        if (canRecallHistory() && recallHistory(-1)) e.preventDefault();
       } else if (e.key === "ArrowDown" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !composing && !e.isComposing) {
-        if (recallHistory(1)) e.preventDefault();
+        if (canRecallHistory() && recallHistory(1)) e.preventDefault();
       }
     });
 
