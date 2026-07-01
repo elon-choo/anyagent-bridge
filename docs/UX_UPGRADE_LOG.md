@@ -25,7 +25,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Partially implemented | Round 4 added safe one-tap command chips (`pwd`, `ls`, `git status`, `whoami`) above the mobile input dock. |
 | 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Implemented | Round 6 wraps the mobile toolbar into ordered rows so all primary controls are visible without horizontal scrolling. |
 | 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Implemented | Round 8 added search/count, current/recent-first ordering, and activity hints; filter test narrowed 37 rows to 1. |
-| 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Backlog | After 320 screenshot shows Claude trust prompt filling terminal. |
+| 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Implemented | Round 17 adds a compact mobile launch assist that keeps Enter/Esc/arrows visible and raises 320px terminal height from 293px to 354px after agent start. |
 | 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Implemented | Round 9 probes the hidden file path with a 200 JSON endpoint before reading; missing/existing file tests produced console errors 0. |
 | 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Implemented | Round 10 added visible fallbacks for terminal runtime, QR generation, and markdown preview libraries; blocked-CDN probes had page errors 0. |
 | 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Verified OK | Round 2 confirmed `icon-192.png`, `icon-512.png`, and `icon-maskable-512.png` are tracked and served with 200. |
@@ -240,3 +240,14 @@ Round 16 evidence:
 - Full 320px notification modal audit: horizontal document overflow 0, page errors 0, console errors 0, four mode controls, all 51px tall.
 - Test cleanup removed temp sessions 165 and 166 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round16/full/`.
+
+Round 17 evidence:
+
+- Before focused 320px agent launch probe: after starting Claude, the toolbar was 211px tall, the dock was 216px tall, the terminal had only 293px, and the trust prompt showed `Enter to confirm · Esc to cancel` while Enter was hidden off-screen in the full keybar.
+- Added a compact mobile launch assist that appears when `startAgent` is sent, hides the quickbar/full keybar, and exposes visible 44px controls for Enter, Esc, Up, Down, Ctrl-C, show all keys, and hide.
+- Focused after probe: page errors 0, console errors 0, native dialogs 0, `startAgent` observed, Esc assist button emitted an `input` frame, quickbar/keybar hidden, agentbar visible, all assist controls 44px+, 320px terminal height increased to 354px, horizontal overflow 0, and cleanup returned the bridge to 37 sessions.
+- Focused reports/screenshots: `/tmp/anyagent-bridge-ux-round17/before/report.json`, `/tmp/anyagent-bridge-ux-round17/before/agent-launch-320.png`, `/tmp/anyagent-bridge-ux-round17/after/report.json`, `/tmp/anyagent-bridge-ux-round17/after/agent-launch-assist-320.png`.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, real `startAgent`, `sendToAgent`, and raw `input` WebSocket frames, image attach, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, notification mode sync, and service-worker Important filtering all passed.
+- Full 320px real Start audit: horizontal document overflow 0, page errors 0, console errors 0, `startAgent` observed, compact assist visible, quickbar/keybar hidden, terminal height 354px, and all assist controls 44px+.
+- Test cleanup removed temp sessions 171, 172, and 173 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round17/full/`.

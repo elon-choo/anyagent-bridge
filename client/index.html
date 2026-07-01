@@ -365,25 +365,37 @@
   /* ---------- Mobile input dock: key bar + compose box ---------- */
   #dock { flex: 0 0 auto; background: var(--bar); border-top: 1px solid var(--border); display: none; flex-direction: column; }
   #dock.on { display: flex; }
+  #agentbar,
   #quickbar, #keybar {
     display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
     border-bottom: 1px solid var(--border); scrollbar-width: thin;
   }
+  #agentbar { display: none; background: rgba(47,129,247,.10); }
+  #dock.agent-assist #agentbar { display: flex; }
+  #dock.agent-assist #quickbar,
+  #dock.agent-assist #keybar { display: none; }
   #quickbar { background: rgba(13,17,23,.38); }
+  #agentbar::-webkit-scrollbar,
   #quickbar::-webkit-scrollbar,
   #keybar::-webkit-scrollbar { height: 5px; }
+  #agentbar::-webkit-scrollbar-thumb,
   #quickbar::-webkit-scrollbar-thumb,
   #keybar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  #agentbar .ak,
   #quickbar .qc,
   #keybar .kb {
     flex: 0 0 auto; min-width: 40px; padding: 7px 10px; font-size: 13px; line-height: 1;
     background: #0d1117; border: 1px solid var(--border); border-radius: 7px; color: var(--fg);
     cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
   }
+  #agentbar .ak:hover,
   #quickbar .qc:hover,
   #keybar .kb:hover { background: #21262d; }
+  #agentbar .ak:active,
   #quickbar .qc:active,
   #keybar .kb:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #agentbar .ak.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  #agentbar .ak.muted { color: var(--muted); }
   #keybar .kb.sticky.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   #keybar .kb.wide { min-width: auto; }
   #keybar .kb .sub { color: var(--muted); font-size: 10px; }
@@ -474,8 +486,10 @@
   #sessModal .sx-new { width: 100%; }
   @media (max-width: 640px) {
     #dock { padding-bottom: env(safe-area-inset-bottom); }
+    #agentbar,
     #quickbar,
     #keybar { padding: 8px; }
+    #agentbar .ak,
     #quickbar .qc,
     #keybar .kb {
       min-width: 44px;
@@ -555,6 +569,7 @@
   <div id="depAlert" role="alert" aria-live="polite"></div>
   <div id="termwrap"><div id="terminal"></div></div>
   <div id="dock" class="on">
+    <div id="agentbar" aria-label="Agent prompt controls"></div>
     <div id="quickbar"></div>
     <div id="keybar"></div>
     <div id="composebar">
@@ -780,6 +795,7 @@
   let pendingAgentStartId = null;   // start after a project-scoped session is created
   let lastMsgAt = 0;                // last time any server message arrived (staleness watchdog)
   let onSessionReady = null;        // optional hook the dock module sets to refresh session UI
+  let showAgentLaunchAssist = null; // optional hook the dock module sets for mobile launch prompts
   let exposureTimer = null;
   let toastT = null;
 
@@ -1187,6 +1203,7 @@
           const agentId = pendingAgentStartId;
           pendingAgentStartId = null;
           send({ type: "startAgent", agentId });
+          if (typeof showAgentLaunchAssist === "function") showAgentLaunchAssist();
           if (term) term.focus();
         }
         break;
@@ -1288,6 +1305,7 @@
       return;
     }
     send({ type: "startAgent", agentId });
+    if (typeof showAgentLaunchAssist === "function") showAgentLaunchAssist();
     if (term) term.focus();
   });
 
@@ -2190,7 +2208,7 @@
 
   // ---------- Mobile input dock: key bar · compose box · image · sessions ----------
   (function setupDock() {
-    const dock = $("dock"), quickbar = $("quickbar"), keybar = $("keybar"), dockToggle = $("dockToggle");
+    const dock = $("dock"), agentbar = $("agentbar"), quickbar = $("quickbar"), keybar = $("keybar"), dockToggle = $("dockToggle");
     const ci = $("composeInput"), sendBtn = $("composeSend"), attachBtn = $("composeAttach"), imgFile = $("imgFile");
     const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList"), sxFilter = $("sxFilter"), sxCount = $("sxCount");
     let draftSessionKey = null;
@@ -2251,6 +2269,46 @@
     }
     buildQuickbar();
 
+    // ---- launch assist: compact prompt controls for mobile agent trust screens ----
+    const AGENT_KEYS = [
+      { t: "⏎", d: "\r", title: "Enter", primary: true },
+      { t: "Esc", d: "\x1b", title: "Escape" },
+      { t: "▲", d: "\x1b[A", title: "Up" },
+      { t: "▼", d: "\x1b[B", title: "Down" },
+      { t: "^C", d: "\x03", title: "Ctrl-C" },
+      { t: "⌨", expand: true, title: "Show all keys" },
+      { t: "×", close: true, title: "Hide" },
+    ];
+    function hideAgentAssist() {
+      dock.classList.remove("agent-assist");
+      setTimeout(onResize, 60);
+    }
+    function buildAgentbar() {
+      agentbar.innerHTML = "";
+      for (const k of AGENT_KEYS) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "ak" + (k.primary ? " primary" : "") + (k.close ? " muted" : "");
+        b.textContent = k.t;
+        b.title = k.title;
+        b.setAttribute("aria-label", k.title);
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (k.close || k.expand) { hideAgentAssist(); return; }
+          if (!send({ type: "input", data: k.d })) toast("Not connected", true);
+          if (term) term.focus();
+        });
+        agentbar.appendChild(b);
+      }
+    }
+    buildAgentbar();
+    showAgentLaunchAssist = () => {
+      if (!window.matchMedia("(max-width: 640px)").matches) return;
+      if (!dock.classList.contains("on")) return;
+      dock.classList.add("agent-assist");
+      setTimeout(onResize, 60);
+    };
+
     // ---- key bar: each button injects a raw sequence into the PTY ----
     // Arrows/Esc/Tab/Ctrl-combos don't exist on a phone's soft keyboard, so expose them here.
     const KEYS = [
@@ -2307,6 +2365,7 @@
       saveComposeDraft();
       ci.value = "";
       draftSessionKey = null;
+      hideAgentAssist();
       autogrow();
     }
     ci.addEventListener("input", () => { autogrow(); saveComposeDraft(); });
