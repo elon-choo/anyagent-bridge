@@ -48,6 +48,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 35 | The physical-phone smoke checklist still lacked a fillable evidence artifact for recording pass/fail, device, network, cleanup, and failures. | 3 | 5 | 15 | Implemented | Round 21 adds `docs/PHONE_SMOKE_REPORT_TEMPLATE.md` and links it from the final audit. |
 | 36 | Final automated acceptance lived only under `/tmp`, making future revalidation hard. | 4 | 5 | 20 | Implemented | Round 22 adds `test/final-ux-acceptance.js` plus `npm run test:ux-final`, covering local desktop/mobile, optional funnel, optional landing, modal focus, PWA endpoints, and cleanup. |
 | 37 | The remaining physical-phone smoke could start with stale tunnel/API/PWA state and waste the tester's first minutes. | 3 | 5 | 15 | Implemented | Round 23 adds `test/phone-smoke-preflight.js` plus `npm run test:phone-preflight`, producing a redacted readiness report before the real phone run. |
+| 38 | The tracked final acceptance still did not deeply exercise the mobile Files editor/Markdown preview path required by the phone smoke. | 4 | 5 | 20 | Implemented | Round 24 adds a 390px mobile Files preview flow to `test/final-ux-acceptance.js` and raises mobile Files editbar/mode controls to touch-safe dimensions. |
 
 Round 1 verification:
 
@@ -305,3 +306,10 @@ Round 23 evidence:
 - Added `npm run test:phone-preflight` as a zero-dependency check before the human phone smoke.
 - The preflight verifies local health, local authenticated sessions/system APIs, local PWA endpoints, Tailscale Funnel health, Funnel authenticated sessions/system APIs, local/funnel session count consistency, and that the check itself does not create sessions.
 - Reports are written to `/tmp/anyagent-bridge-phone-smoke/phone-smoke-preflight-report.json`.
+
+Round 24 evidence:
+
+- Added a 390px mobile Files workflow to `test/final-ux-acceptance.js`.
+- The runner now creates a temporary project and Markdown fixture under ignored `uploads/`, opens it through the real Files UI, switches to Preview, verifies no horizontal overflow, verifies Markdown preview text is visible, verifies injected script markup does not execute, and cleans up the project and fixture.
+- Fixed the mobile Files editbar touch targets: mode buttons and icon-only Save/download/rename/delete controls now measure 44px+ in the acceptance report.
+- Latest acceptance report: `/tmp/anyagent-bridge-final-audit/final-ux-acceptance-report.json`; screenshot: `/tmp/anyagent-bridge-final-audit/local-mobile-files-preview.png`.

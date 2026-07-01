@@ -147,7 +147,9 @@ function createRunState() {
     consoleErrors: [],
     dialogs: [],
     requestFailures: [],
-    createdSessions: new Set()
+    createdSessions: new Set(),
+    createdProjects: new Set(),
+    fixtureDirs: new Set()
   };
 }
 
@@ -398,6 +400,121 @@ async function localMobileFlow(browser, state) {
   return { initialSession: tracker.sessionIds[0] || null, tracker, initial, afterFirstCommand, launchAssist };
 }
 
+async function setupFileFixture(state) {
+  const id = `${Date.now()}-${process.pid}`;
+  const dir = path.join(ROOT, 'uploads', 'ux-final-files', id);
+  const fileName = 'mobile-preview.md';
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, fileName), [
+    '# Round 24 Mobile File UX',
+    '',
+    '- Markdown preview is visible on a phone viewport.',
+    '- The file tree can open a project-scoped fixture.',
+    '',
+    '<script>window.__aabUxFinalXss = 1</script>',
+    ''
+  ].join('\n'), 'utf8');
+  state.fixtureDirs.add(dir);
+
+  const projectName = `AAB UX Final Files ${id}`;
+  const response = await apiJson(BASE_URL, '/api/projects', {
+    method: 'POST',
+    body: { name: projectName, path: dir }
+  });
+  if (!response.ok || !response.body || !response.body.success) {
+    throw new Error(`Could not create temporary file project: ${response.status}`);
+  }
+  state.createdProjects.add(projectName);
+  return { dir, fileName, projectName };
+}
+
+async function mobileFilesFlow(browser, state) {
+  const fixture = await setupFileFixture(state);
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-mobile-files-390');
+  await page.addInitScript((projectPath) => {
+    localStorage.setItem('aab.selectedProjectPath', projectPath);
+  }, fixture.dir);
+  await openApp(page, BASE_URL);
+  await page.waitForFunction(projectPath => {
+    const sel = document.querySelector('#projectSel');
+    return sel && Array.from(sel.options).some(option => option.value === projectPath);
+  }, fixture.dir, { timeout: 15000 });
+  await page.selectOption('#projectSel', fixture.dir);
+
+  await page.click('#filesBtn');
+  await page.waitForSelector('#fileExp.open', { timeout: 15000 });
+  await waitFor(page, projectPath => {
+    const crumb = document.querySelector('#fxCrumb');
+    return crumb && crumb.textContent.includes(projectPath);
+  }, fixture.dir, 'temporary project files root');
+
+  await page.locator('#fxTree .fx-row').filter({ hasText: fixture.fileName }).first().click({ position: { x: 30, y: 20 } });
+  await waitFor(page, fileName => {
+    const name = document.querySelector('#fxFname');
+    return name && name.textContent.includes(fileName);
+  }, fixture.fileName, 'fixture markdown open');
+
+  await page.click('#fxModes button[data-mode="preview"]');
+  await waitFor(page, () => {
+    const preview = document.querySelector('#fxPrev');
+    return preview && getComputedStyle(preview).display !== 'none' && preview.innerText.includes('Round 24 Mobile File UX');
+  }, null, 'mobile markdown preview');
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-mobile-files-preview.png'), fullPage: true });
+
+  const fileState = await page.evaluate(() => {
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const rectOf = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return { w: Math.round(rect.width), h: Math.round(rect.height), x: Math.round(rect.x), y: Math.round(rect.y) };
+    };
+    const editbarButtons = Array.from(document.querySelectorAll('#fxEditbar button'))
+      .filter(visible)
+      .map(button => {
+        const rect = button.getBoundingClientRect();
+        return {
+          text: (button.textContent || button.getAttribute('aria-label') || '').trim(),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height)
+        };
+      });
+    const preview = document.querySelector('#fxPrev');
+    const tree = document.querySelector('#fxTree');
+    const textarea = document.querySelector('#fxTa');
+    const fileExp = document.querySelector('#fileExp');
+    return {
+      open: !!document.querySelector('#fileExp.open'),
+      fileName: document.querySelector('#fxFname')?.textContent || '',
+      previewText: preview ? preview.innerText : '',
+      previewVisible: visible(preview),
+      textareaVisible: visible(textarea),
+      treeVisible: visible(tree),
+      previewMode: !!(fileExp && fileExp.classList.contains('fx-preview-mode')),
+      previewRect: rectOf(preview),
+      treeRect: rectOf(tree),
+      overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      scriptExecuted: window.__aabUxFinalXss === 1,
+      previewContainsScriptTag: !!(preview && preview.querySelector('script')),
+      editbarButtons,
+      editbarTouchSafe: editbarButtons.every(button => button.w >= 44 && button.h >= 44)
+    };
+  });
+
+  await context.close();
+  return { initialSession: tracker.sessionIds[0] || null, tracker, fixture: { dir: fixture.dir, fileName: fixture.fileName }, fileState };
+}
+
 async function funnelMobileFlow(browser, state) {
   if (SKIP_FUNNEL) return { skipped: true };
   const context = await browser.newContext({
@@ -524,9 +641,32 @@ async function cleanupSessions(ids, beforeCount) {
   };
 }
 
+async function cleanupArtifacts(state) {
+  const projectResults = [];
+  for (const name of Array.from(state.createdProjects)) {
+    const response = await apiJson(BASE_URL, `/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    projectResults.push({ name, status: response.status, ok: response.ok });
+  }
+  const fixtureResults = [];
+  for (const dir of Array.from(state.fixtureDirs)) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fixtureResults.push({ dir, ok: true });
+    } catch (err) {
+      fixtureResults.push({ dir, ok: false, error: compactMessage(err.message || err) });
+    }
+  }
+  return {
+    projects: projectResults,
+    fixtures: fixtureResults,
+    ok: projectResults.every(item => item.ok) && fixtureResults.every(item => item.ok)
+  };
+}
+
 function buildChecks(report) {
   const desktop = report.flows.localDesktop;
   const mobile = report.flows.localMobile320;
+  const files = report.flows.mobileFiles390;
   const funnel = report.flows.funnelMobile390;
   const landing = report.landingProduction;
   const pwa = report.pwa;
@@ -562,6 +702,15 @@ function buildChecks(report) {
       startAndKeys: hasSent(mobile.tracker, 'startAgent') &&
         hasSent(mobile.tracker, 'input', item => item.data === '\x1b') &&
         hasSent(mobile.tracker, 'input', item => item.data === '\x03')
+    },
+    mobileFiles390: {
+      newSession: !!files.initialSession,
+      openedFixture: files.fileState.open && files.fileState.fileName.includes(files.fixture.fileName),
+      previewVisible: files.fileState.previewVisible && files.fileState.previewText.includes('Round 24 Mobile File UX'),
+      previewMode: files.fileState.previewMode && !files.fileState.textareaVisible,
+      noOverflow: !files.fileState.overflowX,
+      touchSafe: files.fileState.editbarTouchSafe,
+      sanitized: !files.fileState.scriptExecuted && !files.fileState.previewContainsScriptTag
     },
     funnelMobile390: funnel.skipped ? { skipped: true } : {
       reachable: !!funnel.initialSession,
@@ -621,6 +770,7 @@ async function main() {
     landingProduction: null,
     pwa: null,
     cleanup: null,
+    artifactCleanup: null,
     checks: null,
     failures: [],
     pass: false
@@ -632,6 +782,7 @@ async function main() {
     browser = await chromium.launch();
     report.flows.localDesktop = await localDesktopFlow(browser, state);
     report.flows.localMobile320 = await localMobileFlow(browser, state);
+    report.flows.mobileFiles390 = await mobileFilesFlow(browser, state);
     report.flows.funnelMobile390 = await funnelMobileFlow(browser, state);
     report.landingProduction = await landingAudit(browser, state);
     report.pwa = await pwaEndpoints();
@@ -647,7 +798,13 @@ async function main() {
     report.cleanup = { beforeCount: beforeSessions.length, created: Array.from(state.createdSessions), error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  try {
+    report.artifactCleanup = await cleanupArtifacts(state);
+  } catch (err) {
+    report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
+  }
+
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),
@@ -665,6 +822,9 @@ async function main() {
   if (report.cleanup.deleteResults && report.cleanup.deleteResults.some(item => !item.ok)) {
     report.failures.push('temporary session cleanup failed');
   }
+  if (report.artifactCleanup && report.artifactCleanup.ok === false) {
+    report.failures.push('temporary file/project cleanup failed');
+  }
   report.pass = report.failures.length === 0;
 
   const reportPath = writeJson('final-ux-acceptance-report.json', report);
@@ -673,6 +833,7 @@ async function main() {
     report: reportPath,
     checks: report.checks,
     cleanup: report.cleanup,
+    artifactCleanup: report.artifactCleanup,
     failures: report.failures,
     pass: report.pass
   };
