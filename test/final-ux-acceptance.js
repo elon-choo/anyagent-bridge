@@ -348,6 +348,41 @@ async function keyboardSnapshot(page) {
   });
 }
 
+async function notificationSnapshot(page) {
+  return page.evaluate(() => {
+    const visible = (el) => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const modal = document.querySelector('#notifModal');
+    const modes = Array.from(document.querySelectorAll('#notifModes [data-push-mode]')).map(button => {
+      const rect = button.getBoundingClientRect();
+      return {
+        mode: button.dataset.pushMode,
+        checked: button.getAttribute('aria-checked') === 'true',
+        on: button.classList.contains('on'),
+        text: (button.textContent || '').trim(),
+        w: Math.round(rect.width),
+        h: Math.round(rect.height)
+      };
+    });
+    const active = modes.find(mode => mode.checked && mode.on);
+    return {
+      open: !!(modal && modal.classList.contains('open') && visible(modal)),
+      activeMode: active ? active.mode : null,
+      summary: document.querySelector('#notifSummary')?.textContent || '',
+      status: document.querySelector('#notifStatus')?.textContent || '',
+      toolbarText: document.querySelector('#notifBtn')?.textContent || '',
+      modes,
+      modesTouchSafe44: modes.every(mode => mode.w >= 44 && mode.h >= 44),
+      singleActiveMode: modes.filter(mode => mode.checked && mode.on).length === 1,
+      overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+    };
+  });
+}
+
 async function modalInfo(page, selector) {
   return page.evaluate((sel) => {
     const modal = document.querySelector(sel);
@@ -612,6 +647,51 @@ async function localMobileKeyboardFlow(browser, state) {
 
   await context.close();
   return { initialSession: tracker.sessionIds[0] || null, tracker, beforeShrink, afterShrink, afterSend };
+}
+
+async function localMobileNotificationsFlow(browser, state) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-mobile-notifications-390');
+  await openApp(page, BASE_URL);
+
+  async function openNotifications() {
+    await page.click('#notifBtn');
+    await waitFor(page, () => document.querySelector('#notifModal')?.classList.contains('open'), null, 'notifications modal open');
+  }
+  async function chooseMode(mode) {
+    await page.click(`#notifModes [data-push-mode="${mode}"]`);
+    await waitFor(page, expected => {
+      const button = document.querySelector(`#notifModes [data-push-mode="${expected}"]`);
+      return button && button.getAttribute('aria-checked') === 'true' && button.classList.contains('on');
+    }, mode, `${mode} notification mode`);
+  }
+  async function closeNotifications() {
+    await page.click('#notifClose');
+    await waitFor(page, () => !document.querySelector('#notifModal')?.classList.contains('open'), null, 'notifications modal close');
+  }
+
+  await openNotifications();
+  const initial = await notificationSnapshot(page);
+  await chooseMode('quiet');
+  const quiet = await notificationSnapshot(page);
+  await closeNotifications();
+  await openNotifications();
+  const quietReopen = await notificationSnapshot(page);
+  await chooseMode('important');
+  const important = await notificationSnapshot(page);
+  await closeNotifications();
+  await openNotifications();
+  const importantReopen = await notificationSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-mobile-notifications-390.png'), fullPage: true });
+  await closeNotifications();
+
+  await context.close();
+  return { initialSession: tracker.sessionIds[0] || null, tracker, initial, quiet, quietReopen, important, importantReopen };
 }
 
 async function setupFileFixture(state) {
@@ -882,6 +962,7 @@ function buildChecks(report) {
   const mobile = report.flows.localMobile320;
   const landscape = report.flows.localMobileLandscape844;
   const keyboard = report.flows.localMobileKeyboard390;
+  const notifications = report.flows.localMobileNotifications390;
   const files = report.flows.mobileFiles390;
   const funnel = report.flows.funnelMobile390;
   const landing = report.landingProduction;
@@ -953,6 +1034,18 @@ function buildChecks(report) {
       terminalUsable: keyboard.afterShrink.termwrapRect && keyboard.afterShrink.termwrapRect.h >= 160,
       sendToAgent: hasSent(keyboard.tracker, 'sendToAgent', item => item.text === 'echo KEYBOARD_PROBE'),
       outputSeen: keyboard.afterSend.bodyHasKeyboardProbe || hasReceived(keyboard.tracker, 'output', item => /KEYBOARD_PROBE/.test(item.sample || ''))
+    },
+    localMobileNotifications390: {
+      newSession: !!notifications.initialSession,
+      modalOpen: notifications.initial.open && notifications.quiet.open && notifications.important.open,
+      quietSelected: notifications.quiet.activeMode === 'quiet' && /question/i.test(notifications.quiet.summary),
+      quietPersists: notifications.quietReopen.activeMode === 'quiet' && /question/i.test(notifications.quietReopen.summary),
+      importantSelected: notifications.important.activeMode === 'important' && /done/i.test(notifications.important.summary),
+      importantPersists: notifications.importantReopen.activeMode === 'important' && /done/i.test(notifications.importantReopen.summary),
+      singleActiveMode: notifications.quiet.singleActiveMode && notifications.quietReopen.singleActiveMode &&
+        notifications.important.singleActiveMode && notifications.importantReopen.singleActiveMode,
+      touchSafe: notifications.quiet.modesTouchSafe44 && notifications.important.modesTouchSafe44,
+      noOverflow: !notifications.initial.overflowX && !notifications.quiet.overflowX && !notifications.importantReopen.overflowX
     },
     mobileFiles390: {
       newSession: !!files.initialSession,
@@ -1036,6 +1129,7 @@ async function main() {
     report.flows.localMobile320 = await localMobileFlow(browser, state);
     report.flows.localMobileLandscape844 = await localMobileLandscapeFlow(browser, state);
     report.flows.localMobileKeyboard390 = await localMobileKeyboardFlow(browser, state);
+    report.flows.localMobileNotifications390 = await localMobileNotificationsFlow(browser, state);
     report.flows.mobileFiles390 = await mobileFilesFlow(browser, state);
     report.flows.funnelMobile390 = await funnelMobileFlow(browser, state);
     report.landingProduction = await landingAudit(browser, state);
@@ -1058,7 +1152,7 @@ async function main() {
     report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),
