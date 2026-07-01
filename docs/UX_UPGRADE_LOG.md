@@ -22,7 +22,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 9 | Image attachment path inserted into compose was not draft-persisted. | 3 | 5 | 15 | Implemented | Image path insert still passes and calls draft save. |
 | 10 | Switching sessions could carry unsent text into the wrong session. | 4 | 4 | 16 | Implemented | Draft is saved before switch/new session and restored per session id. |
 | 11 | The UI reports `connected` before the server `ready` frame. | 3 | 4 | 12 | Implemented | Round 3 changed socket-open status to `attaching...`; `connected` is set only after server `ready`. |
-| 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Partially implemented | Round 4 added safe one-tap command chips (`pwd`, `ls`, `git status`, `whoami`) above the mobile input dock. |
+| 12 | The first-use terminal is visually empty; beginners get no safe next action. | 4 | 3 | 12 | Implemented | Round 18 adds a fresh-session starter panel inside the terminal with Start agent plus safe `pwd`, `ls`, and `git status` actions; mobile starter buttons are 44px+ and first command sends in one tap. |
 | 13 | Mobile toolbar is usable but horizontally clipped; feature discovery still depends on swiping. | 3 | 4 | 12 | Implemented | Round 6 wraps the mobile toolbar into ordered rows so all primary controls are visible without horizontal scrolling. |
 | 14 | Session list can grow noisy with many unnamed sessions. | 3 | 4 | 12 | Implemented | Round 8 added search/count, current/recent-first ordering, and activity hints; filter test narrowed 37 rows to 1. |
 | 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Implemented | Round 17 adds a compact mobile launch assist that keeps Enter/Esc/arrows visible and raises 320px terminal height from 293px to 354px after agent start. |
@@ -251,3 +251,13 @@ Round 17 evidence:
 - Full 320px real Start audit: horizontal document overflow 0, page errors 0, console errors 0, `startAgent` observed, compact assist visible, quickbar/keybar hidden, terminal height 354px, and all assist controls 44px+.
 - Test cleanup removed temp sessions 171, 172, and 173 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round17/full/`.
+
+Round 18 evidence:
+
+- Before focused fresh-mobile probe: a new session showed only the shell prompt in the terminal, `#starterPanel` did not exist, and safe commands were available only down in the dock quickbar.
+- Added a fresh-session starter panel inside the terminal with `Start Claude Code`, `pwd`, `ls`, `git status`, and hide controls; it appears only on non-reconnect `ready` frames and hides after successful command send or agent start.
+- Focused after probe at 390x844: page errors 0, console errors 0, native dialogs 0, starter visible, horizontal overflow 0, buttons measured `Start Claude Code` 130x44, `pwd` 44x44, `ls` 44x44, `git status` 73x44, hide 44x44, `pwd` emitted one `sendToAgent` frame, output included `/Users/elon`, and cleanup returned the bridge to 37 sessions.
+- Focused reports/screenshots: `/tmp/anyagent-bridge-ux-round18/before/report.json`, `/tmp/anyagent-bridge-ux-round18/before/fresh-mobile.png`, `/tmp/anyagent-bridge-ux-round18/after2/report.json`, `/tmp/anyagent-bridge-ux-round18/after2/fresh-starter-open.png`, `/tmp/anyagent-bridge-ux-round18/after2/fresh-starter-after-command.png`.
+- Full desktop/mobile flow: health 200, page errors 0, console errors 0, native dialogs 0, desktop starter/compose/image attach/Esc key/session filter/new session/switch back/offline-online reconnect passed; 320px mobile starter `pwd`, real `startAgent`, launch assist Esc and Ctrl-C input frames, and 44px+ starter/assist controls passed.
+- Test cleanup removed temp sessions 183, 184, and 185 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round18/full/`.

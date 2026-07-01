@@ -93,6 +93,17 @@
     background: var(--bg);
   }
   #terminal { width: 100%; height: 100%; }
+  #starterPanel {
+    display: none; position: absolute; left: 14px; top: 14px; z-index: 4;
+    width: min(336px, calc(100% - 28px)); padding: 12px;
+    background: rgba(22,27,34,.94); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  }
+  #starterPanel.open { display: block; }
+  #starterPanel .starter-title { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--fg); }
+  #starterPanel .starter-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+  #starterPanel button { min-width: 44px; min-height: 36px; }
+  #starterPanel button.primary { font-weight: 700; }
   #depAlert {
     display: none; flex: 0 0 auto;
     margin: 8px 10px 0; padding: 10px 12px;
@@ -503,6 +514,8 @@
     #composebar { padding: 8px; }
     #composebar .attach, #composeSend { min-width: 44px; min-height: 44px; }
     #composeInput { min-height: 44px; }
+    #starterPanel { left: 10px; top: 10px; width: calc(100% - 20px); }
+    #starterPanel button { min-height: 44px; }
     #sessModal .sx-tools { align-items: stretch; }
     #sessModal .sx-filter { min-height: 44px; }
     #sessModal .sx-count { display: inline-flex; align-items: center; min-height: 44px; }
@@ -567,7 +580,19 @@
     <span id="status" class="disconnected"><span class="led"></span><span id="statusText">disconnected</span></span>
   </div>
   <div id="depAlert" role="alert" aria-live="polite"></div>
-  <div id="termwrap"><div id="terminal"></div></div>
+  <div id="termwrap">
+    <div id="starterPanel" aria-live="polite">
+      <p class="starter-title">Ready</p>
+      <div class="starter-actions">
+        <button type="button" class="primary" id="starterAgent">Start agent</button>
+        <button type="button" data-starter-cmd="pwd">pwd</button>
+        <button type="button" data-starter-cmd="ls">ls</button>
+        <button type="button" data-starter-cmd="git status">git status</button>
+        <button type="button" id="starterHide" aria-label="Hide starter">×</button>
+      </div>
+    </div>
+    <div id="terminal"></div>
+  </div>
   <div id="dock" class="on">
     <div id="agentbar" aria-label="Agent prompt controls"></div>
     <div id="quickbar"></div>
@@ -796,6 +821,8 @@
   let lastMsgAt = 0;                // last time any server message arrived (staleness watchdog)
   let onSessionReady = null;        // optional hook the dock module sets to refresh session UI
   let showAgentLaunchAssist = null; // optional hook the dock module sets for mobile launch prompts
+  let showFreshStarter = null;      // optional hook the dock module sets for first-use sessions
+  let hideFreshStarter = null;      // optional hook the dock module sets for first-use sessions
   let exposureTimer = null;
   let toastT = null;
 
@@ -1199,10 +1226,12 @@
         setStatus("connected", "connected");
         if (connected && term) send({ type: "resize", cols: term.cols, rows: term.rows });
         if (typeof onSessionReady === "function") onSessionReady();
+        if (!msg.isReconnect && !pendingAgentStartId && typeof showFreshStarter === "function") showFreshStarter();
         if (pendingAgentStartId) {
           const agentId = pendingAgentStartId;
           pendingAgentStartId = null;
           send({ type: "startAgent", agentId });
+          if (typeof hideFreshStarter === "function") hideFreshStarter();
           if (typeof showAgentLaunchAssist === "function") showAgentLaunchAssist();
           if (term) term.focus();
         }
@@ -1299,12 +1328,14 @@
     if (!agentId) return;
     const project = selectedProject();
     if (project && currentSessionProjectPath !== project.path) {
+      if (typeof hideFreshStarter === "function") hideFreshStarter();
       pendingAgentStartId = agentId;
       targetSessionId = null;
       reconnectNow(true);
       return;
     }
     send({ type: "startAgent", agentId });
+    if (typeof hideFreshStarter === "function") hideFreshStarter();
     if (typeof showAgentLaunchAssist === "function") showAgentLaunchAssist();
     if (term) term.focus();
   });
@@ -2210,6 +2241,7 @@
   (function setupDock() {
     const dock = $("dock"), agentbar = $("agentbar"), quickbar = $("quickbar"), keybar = $("keybar"), dockToggle = $("dockToggle");
     const ci = $("composeInput"), sendBtn = $("composeSend"), attachBtn = $("composeAttach"), imgFile = $("imgFile");
+    const starterPanel = $("starterPanel"), starterAgent = $("starterAgent"), starterHide = $("starterHide");
     const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList"), sxFilter = $("sxFilter"), sxCount = $("sxCount");
     let draftSessionKey = null;
     let historyIndex = -1;
@@ -2244,9 +2276,33 @@
     function sendText(text) {
       if (!String(text || "").trim()) return false;
       if (!send({ type: "sendToAgent", text })) { toast("Not connected", true); return false; }
+      hideStarter();
       rememberCommand(text);
       return true;
     }
+    function updateStarterAgent() {
+      if (!starterAgent) return;
+      const opt = agentSel && agentSel.options && agentSel.options[agentSel.selectedIndex];
+      starterAgent.textContent = opt && opt.value ? ("Start " + (opt.textContent || opt.value)) : "Start agent";
+      starterAgent.disabled = !agentSel || !agentSel.value;
+    }
+    function showStarter() {
+      if (!starterPanel) return;
+      updateStarterAgent();
+      starterPanel.classList.add("open");
+    }
+    function hideStarter() {
+      if (starterPanel) starterPanel.classList.remove("open");
+    }
+    showFreshStarter = showStarter;
+    hideFreshStarter = hideStarter;
+    if (agentSel) agentSel.addEventListener("change", updateStarterAgent);
+    if (starterPanel) starterPanel.addEventListener("click", (e) => {
+      const cmd = e.target && e.target.closest && e.target.closest("[data-starter-cmd]");
+      if (cmd) { sendText(cmd.dataset.starterCmd); return; }
+      if (e.target === starterAgent) { hideStarter(); startBtn.click(); return; }
+      if (e.target === starterHide) hideStarter();
+    });
     function buildQuickbar() {
       quickbar.innerHTML = "";
       for (const cmd of QUICK_COMMANDS) {
