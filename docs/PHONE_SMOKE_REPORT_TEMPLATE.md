@@ -22,6 +22,7 @@ Use this template after running the 30-minute real-phone checklist in `docs/FINA
 
 | Check | Result | Evidence / Notes |
 |---|---|---|
+| `npm run test:phone-preflight` passes before starting |  | Report: `/tmp/anyagent-bridge-phone-smoke/phone-smoke-preflight-report.json` |
 | Local bridge health is 200 before starting |  |  |
 | Tailscale Funnel URL opens on the phone |  |  |
 | Session count noted before smoke |  |  |
@@ -79,4 +80,3 @@ Choose one:
 Final verdict:
 
 Notes:
-

@@ -47,6 +47,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 34 | Final evidence was scattered across many round reports, and the real-phone smoke still needed an explicit checklist. | 4 | 5 | 20 | Implemented | Round 20 adds `docs/FINAL_UX_AUDIT.md`, a consolidated final acceptance report, and a 30-minute physical-phone smoke checklist. |
 | 35 | The physical-phone smoke checklist still lacked a fillable evidence artifact for recording pass/fail, device, network, cleanup, and failures. | 3 | 5 | 15 | Implemented | Round 21 adds `docs/PHONE_SMOKE_REPORT_TEMPLATE.md` and links it from the final audit. |
 | 36 | Final automated acceptance lived only under `/tmp`, making future revalidation hard. | 4 | 5 | 20 | Implemented | Round 22 adds `test/final-ux-acceptance.js` plus `npm run test:ux-final`, covering local desktop/mobile, optional funnel, optional landing, modal focus, PWA endpoints, and cleanup. |
+| 37 | The remaining physical-phone smoke could start with stale tunnel/API/PWA state and waste the tester's first minutes. | 3 | 5 | 15 | Implemented | Round 23 adds `test/phone-smoke-preflight.js` plus `npm run test:phone-preflight`, producing a redacted readiness report before the real phone run. |
 
 Round 1 verification:
 
@@ -297,3 +298,10 @@ Round 22 evidence:
 - Added `npm run test:ux-final` as an opt-in command, separate from the zero-dependency `npm test` suite.
 - The runner covers local desktop 1440px, local mobile 320px, optional Tailscale funnel mobile 390px, optional production landing 1440/390/320px, modal semantics/focus restoration, PWA endpoints, and temporary session cleanup.
 - Reports are written to `/tmp/anyagent-bridge-final-audit/final-ux-acceptance-report.json` and `/tmp/anyagent-bridge-final-audit/final-ux-acceptance-summary.json`.
+
+Round 23 evidence:
+
+- Added a tracked physical-phone smoke preflight runner: `test/phone-smoke-preflight.js`.
+- Added `npm run test:phone-preflight` as a zero-dependency check before the human phone smoke.
+- The preflight verifies local health, local authenticated sessions/system APIs, local PWA endpoints, Tailscale Funnel health, Funnel authenticated sessions/system APIs, local/funnel session count consistency, and that the check itself does not create sessions.
+- Reports are written to `/tmp/anyagent-bridge-phone-smoke/phone-smoke-preflight-report.json`.
