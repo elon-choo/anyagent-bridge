@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0d1117" />
 <title>AnyAgent Bridge</title>
 <link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
 <style>
   :root {
@@ -69,6 +70,22 @@
   #status.connected .led { background: var(--green); box-shadow: 0 0 6px var(--green); }
   #status.connecting .led { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
   #status.disconnected .led { background: var(--red); }
+  #exposureBadge {
+    display: none; align-items: center; gap: 6px;
+    min-height: 31px; padding: 0 10px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: #0d1117; color: var(--muted);
+    font-size: 12px; white-space: nowrap;
+  }
+  #exposureBadge.on { display: inline-flex; }
+  #exposureBadge::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); flex: 0 0 auto;
+  }
+  #exposureBadge.local::before { background: var(--green); }
+  #exposureBadge.lan::before { background: var(--yellow); }
+  #exposureBadge.tunnel::before { background: var(--red); }
+  #exposureBadge.unknown::before { background: var(--muted); }
 
   #termwrap {
     flex: 1 1 auto; position: relative;
@@ -124,6 +141,11 @@
       flex: 0 0 auto;
       min-height: 44px;
       padding: 0 8px;
+    }
+    #exposureBadge {
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 0 12px;
     }
     select, button, input { font-size: 12px; }
   }
@@ -377,6 +399,7 @@
 <div id="app">
   <div id="bar">
     <span class="title">AnyAgent<span class="dot">·</span>Bridge</span>
+    <span id="exposureBadge" class="unknown" title=""></span>
     <select id="agentSel" title="Agent"></select>
     <button id="startBtn">Start</button>
     <button id="connectBtn" title="Open on a phone or another device">📱 Connect a device</button>
@@ -554,7 +577,7 @@
   const gateMsg = $("gateMsg"), totpRow = $("totpRow"), totpInput = $("totpInput");
   const oauthRow = $("oauthRow"), oauthGoogle = $("oauthGoogle"), oauthGithub = $("oauthGithub");
   const agentSel = $("agentSel"), startBtn = $("startBtn"), projectSel = $("projectSel");
-  const statusEl = $("status"), statusText = $("statusText");
+  const statusEl = $("status"), statusText = $("statusText"), exposureBadge = $("exposureBadge");
 
   // ---------- State ----------
   let token = null;
@@ -573,6 +596,7 @@
   let pendingAgentStartId = null;   // start after a project-scoped session is created
   let lastMsgAt = 0;                // last time any server message arrived (staleness watchdog)
   let onSessionReady = null;        // optional hook the dock module sets to refresh session UI
+  let exposureTimer = null;
 
   const STORAGE = {
     lastSession: "aab.lastSessionId",
@@ -587,6 +611,79 @@
   function setStatus(state, text) {
     statusEl.className = state;
     statusText.textContent = text || state;
+  }
+
+  function authSummary(auth) {
+    if (!auth) return "auth unknown";
+    if (auth.requireLogin) return "login required";
+    if (auth.totp && auth.totp.confirmed) return "2FA on";
+    if (auth.oauth && auth.oauth.enabled) return "OAuth on";
+    return "token only";
+  }
+
+  function classifyExposure(sys) {
+    if (!sys || !sys.server) {
+      return { state: "unknown", label: "Unknown", title: "Could not read bridge exposure status." };
+    }
+    const tunnel = sys.tunnel && sys.tunnel.url;
+    const authText = authSummary(sys.auth);
+    if (tunnel) {
+      return {
+        state: "tunnel",
+        label: "Tunnel",
+        title: "Reachable through an internet tunnel; " + authText + ". Keep the access token private."
+      };
+    }
+    const host = String(sys.server.host || "").toLowerCase();
+    const remotePage = !/^(127\.0\.0\.1|localhost|\[::1\]|::1)$/.test(location.hostname);
+    if (host === "0.0.0.0" || host === "::" || remotePage) {
+      return {
+        state: "lan",
+        label: "Network",
+        title: "Reachable from this network if routing/firewall allows it; " + authText + "."
+      };
+    }
+    return {
+      state: "local",
+      label: "Local",
+      title: "Listening on this computer only; " + authText + "."
+    };
+  }
+
+  function setExposureBadge(info) {
+    if (!exposureBadge) return;
+    const safe = info || { state: "unknown", label: "Unknown", title: "Could not read bridge exposure status." };
+    exposureBadge.className = "on " + (/^(local|lan|tunnel|unknown)$/.test(safe.state) ? safe.state : "unknown");
+    exposureBadge.textContent = safe.label;
+    exposureBadge.title = safe.title;
+  }
+
+  function hideExposureBadge() {
+    if (!exposureBadge) return;
+    exposureBadge.className = "unknown";
+    exposureBadge.textContent = "";
+    exposureBadge.title = "";
+  }
+
+  async function refreshExposureBadge() {
+    try {
+      const sys = await api("/api/system/status");
+      setExposureBadge(classifyExposure(sys));
+      return sys;
+    } catch (_) {
+      setExposureBadge(null);
+      return null;
+    }
+  }
+
+  function startExposureRefresh() {
+    refreshExposureBadge();
+    if (!exposureTimer) exposureTimer = setInterval(refreshExposureBadge, 60000);
+  }
+
+  function stopExposureRefresh() {
+    if (exposureTimer) { clearInterval(exposureTimer); exposureTimer = null; }
+    hideExposureBadge();
   }
 
   // ---------- Terminal ----------
@@ -884,6 +981,7 @@
   // ---------- Login gate ----------
   function showGate(errMsg) {
     setStatus("disconnected", "disconnected");
+    stopExposureRefresh();
     manualClose = true;
     if (ws) { try { ws.close(); } catch (_) {} ws = null; }
     gateErr.textContent = errMsg || "";
@@ -914,7 +1012,7 @@
   async function startSession() {
     try { await loadAgents(); await loadProjects(); }
     catch (e) { if (e.unauthorized) { showGate("Authentication failed."); return false; } }
-    hideGate(); initTerminal(); connect(); return true;
+    hideGate(); initTerminal(); startExposureRefresh(); connect(); return true;
   }
 
   // Resume an existing cookie session (set by OAuth, or a prior token login).
@@ -1008,7 +1106,7 @@
     const phoneMsg = $("obPhoneMsg"), tunnelRow = $("obTunnelRow"), qrCap = $("obQrCap");
     tunnelRow.innerHTML = "";
     let sys = null;
-    try { sys = await api("/api/system/status"); } catch (_) {}
+    try { sys = await refreshExposureBadge(); } catch (_) {}
     const tunnelUrl = sys && sys.tunnel && sys.tunnel.url;
     const isLocalHost = location.hostname === "127.0.0.1" || location.hostname === "localhost";
     if (tunnelUrl) {
@@ -1048,6 +1146,7 @@
       const url = sys && sys.tunnel && sys.tunnel.url;
       if (url) {
         tunnelPolling = false;
+        setExposureBadge(classifyExposure(sys));
         btn.textContent = "Tunnel ready ✓";
         $("obPhoneMsg").textContent = "Scan to open over the internet:";
         $("obQrCap").textContent = "Point your phone's camera at this code.";

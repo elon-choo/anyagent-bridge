@@ -28,11 +28,11 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 15 | Agent trust prompts can dominate a 320px screen after launch. | 3 | 4 | 12 | Backlog | After 320 screenshot shows Claude trust prompt filling terminal. |
 | 16 | Secrets modal expects `.env.local` 404 as normal, but the browser logs it as a failed resource. | 2 | 4 | 8 | Backlog | After report has expected `.env.local` 404. |
 | 17 | CDN dependencies for xterm, QR, marked, and DOMPurify have no visible offline/failure fallback. | 4 | 2 | 8 | Backlog | Code inspection of external script/style URLs. |
-| 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Backlog | Code/file inspection. |
+| 18 | PWA manifest references PNG icons, while the client directory currently has only `icon.svg`. | 3 | 3 | 9 | Verified OK | Round 2 confirmed `icon-192.png`, `icon-512.png`, and `icon-maskable-512.png` are tracked and served with 200. |
 | 19 | Reconnect/offline state can remain visually `connected` briefly after network loss. | 3 | 3 | 9 | Backlog | Before offline probe still read `connected` after 900ms. |
 | 20 | File creation, rename, and delete still rely on `prompt` / `confirm`, which is rough on mobile. | 3 | 3 | 9 | Backlog | Code inspection in file explorer handlers. |
 | 21 | Notification settings are one-button only; there is no quiet/noise control. | 3 | 3 | 9 | Backlog | Code inspection of push setup. |
-| 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Backlog | Top bar has no persistent exposure badge. |
+| 22 | Security visibility for local vs tunnel exposure is buried in the Connect-device modal. | 4 | 3 | 12 | Implemented | Round 2 added a persistent top-bar exposure badge: Local, Network, or Tunnel. |
 | 23 | Markdown preview depends on runtime CDN loading. | 3 | 3 | 9 | Backlog | Code inspection of `loadMd()`. |
 | 24 | Reduced-motion and animation preferences are not explicitly handled. | 2 | 4 | 8 | Backlog | CSS inspection. |
 
@@ -50,3 +50,15 @@ Round 1 verification:
 - Mobile target audit: 0 audited controls under 44px at 320px and 390px.
 - Server diff: empty.
 - Secret scan: broad grep only found documented token references and deliberate redaction fixtures; diff scan only has normal token-handling code.
+
+Round 2 evidence:
+
+- Badge before state: no `#exposureBadge` in the top bar.
+- Current localhost badge: `Local`, class `local`, 44px high on mobile and visible in the first mobile viewport.
+- Mocked LAN badge: `Network`, class `lan`, 44px high on mobile.
+- Mocked tunnel badge: `Tunnel`, class `tunnel`, 44px high on mobile.
+- Badge rendering uses `textContent`, fixed class allowlist, and server-provided `/api/system/status` only.
+- Browser page errors during targeted badge test: 0.
+- Manifest/icon endpoints checked: `/manifest.webmanifest`, `/icon.svg`, `/icon-192.png`, `/icon-512.png`, and `/icon-maskable-512.png` returned 200.
+- Explicit SVG favicon link added; browser page load produced 0 HTTP errors and 0 console errors in the targeted mobile check.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round2/full/`.
