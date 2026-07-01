@@ -2336,6 +2336,9 @@
       while (list.length > 30) list.shift();
       historyIndex = list.length;
     }
+    function resetHistoryCursor() {
+      historyIndex = historyList().length;
+    }
     function recallHistory(delta) {
       const list = historyList();
       if (!list.length) return false;
@@ -2500,6 +2503,7 @@
       if (stored || !ci.value) ci.value = stored || "";
       else storageSet(composeDraftKey(currentSessionId), ci.value);
       draftSessionKey = keyId;
+      resetHistoryCursor();
       autogrow();
     }
     function prepareComposeForSessionChange() {

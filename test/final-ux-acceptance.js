@@ -582,6 +582,12 @@ async function verifySessionSwitch(page, tracker) {
   await switchToSession(page, tracker, firstSession, 'final switch back');
   await waitFor(page, expected => document.querySelector('#composeInput')?.value === expected, firstDraftBeforeSwitch, 'final first session draft restore');
   const firstDraftAfterFinalBack = await composeValue(page);
+  await page.fill('#composeInput', '');
+  await page.focus('#composeInput');
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(150);
+  const firstHistoryAfterReturn = await composeValue(page);
+  await page.fill('#composeInput', firstDraftBeforeSwitch);
 
   return {
     firstSession,
@@ -594,7 +600,9 @@ async function verifySessionSwitch(page, tracker) {
     secondStartedClean: secondInitialDraft === '',
     firstDraftRestored: firstDraftAfterBack === firstDraftBeforeSwitch && firstDraftAfterFinalBack === firstDraftBeforeSwitch,
     secondDraftRestored: secondDraftAfterReturn === secondDraft,
-    secondDraftIsolated: secondDraftAfterReturn === secondDraft && !firstDraftAfterBack.includes(secondDraft)
+    secondDraftIsolated: secondDraftAfterReturn === secondDraft && !firstDraftAfterBack.includes(secondDraft),
+    firstHistoryAfterReturn,
+    sessionHistoryCursorReset: /^for i in /.test(firstHistoryAfterReturn)
   };
 }
 
@@ -1190,7 +1198,8 @@ function buildChecks(report) {
         desktop.sessionSwitch.secondStartedClean &&
         desktop.sessionSwitch.firstDraftRestored &&
         desktop.sessionSwitch.secondDraftRestored &&
-        desktop.sessionSwitch.secondDraftIsolated),
+        desktop.sessionSwitch.secondDraftIsolated &&
+        desktop.sessionSwitch.sessionHistoryCursorReset),
       modalsAccessible: modalValues.length === 6 && modalValues.every(item =>
         item.opened.open &&
         item.opened.role === 'dialog' &&

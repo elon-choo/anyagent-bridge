@@ -60,6 +60,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 47 | Reloading or restarting the app after scrolling terminal history did not restore the same visible terminal position. | 5 | 5 | 25 | Implemented | Round 33 stores terminal viewport per session, restores it after same-session reload replay, and adds final acceptance that reload preserves `scrollTop`, visible rows, and the same session id. |
 | 48 | Closing the current session could carry its unsent compose draft into the replacement session and leave old local draft/scroll keys behind. | 5 | 5 | 25 | Implemented | Round 34 purges closed-session local state, clears compose before replacement reconnect, and adds final acceptance for closing the current session from the Sessions UI. |
 | 49 | Compose command-history recall could overwrite pasted multiline prompts when ArrowUp or ArrowDown was meant to move inside the textarea. | 5 | 5 | 25 | Implemented | Round 35 keeps history recall for empty/single-line compose input but leaves multiline or selected text to native textarea navigation, with final acceptance coverage. |
+| 50 | After switching sessions, command-history ArrowUp could use another session's cursor and recall the oldest command instead of the active session's latest command. | 4 | 5 | 20 | Implemented | Round 36 resets the in-memory history cursor to the active session's history end when that session becomes active, and final acceptance verifies recall after switching back. |
 
 Round 1 verification:
 
@@ -409,3 +410,12 @@ Round 35 evidence:
 - Focused after probe: after seeding history with `echo R35_HISTORY_ONE`, typing `FIRST LINE\nSECOND LINE` and pressing ArrowUp preserved the multiline text exactly, while clearing the field and pressing ArrowUp still recalled `echo R35_HISTORY_ONE`; page errors were 0.
 - Extended `test/final-ux-acceptance.js` with `localDesktop.multilineHistorySafe`; latest `npm run test:ux-final` passed after preserving `FIRST LINE\nSECOND LINE` across ArrowUp/ArrowDown and still recalling `for i in $(seq 1 140); do echo FINAL_SCROLL_$i; done` from an empty single-line compose box.
 - In the latest run, desktop session 336 passed multiline history safety, reconnect/reload scroll preservation stayed at `scrollTop: 548` with top row `FINAL_SCROLL_33`, and temporary sessions 336, 337, 338, 339, 341, 342, 343, 344, 345, and 346 were deleted; session 340 was closed through the UI; session count returned from 37 to 37.
+
+Round 36 evidence:
+
+- Focused before probe: in session 349, after sending `echo R36_FIRST_A`, `echo R36_FIRST_B`, and `echo R36_FIRST_C`, switching to session 350 for `echo R36_SECOND_ONLY` and then returning to session 349 made the first ArrowUp recall `echo R36_FIRST_A` instead of the expected latest `echo R36_FIRST_C`; page errors were 0.
+- Added `resetHistoryCursor()` on active-session draft restore so the global cursor points to the end of the newly active session's own in-memory history.
+- Focused after probe: the same flow with sessions 351 and 352 recalled `echo R36_FIRST_C` on the first ArrowUp after returning to session 351; page errors were 0.
+- Extended `test/final-ux-acceptance.js` so the desktop session-switch flow clears compose after switching back to the first session and requires ArrowUp to recall that session's latest command, while restoring the uploaded-image draft afterward.
+- Latest `npm run test:ux-final` passed with `localDesktop.draftIsolation`, `multilineHistorySafe`, `scrollPositionPreserved`, `reloadSameSession`, and `reloadScrollPositionPreserved` true; after returning to session 353, ArrowUp recalled `for i in $(seq 1 140); do echo FINAL_SCROLL_$i; done`.
+- Temporary sessions 353, 354, 355, 356, 358, 359, 360, 361, 362, and 363 were deleted; session 357 was closed through the UI; session count returned from 37 to 37.
