@@ -102,9 +102,30 @@
   #gate .oauthBtn:hover { background: #30363d; }
 
   @media (max-width: 640px) {
-    #bar .title { width: 100%; margin-bottom: 2px; }
-    select, button, input { font-size: 12px; padding: 7px 9px; }
-    #status { margin-left: auto; }
+    #bar {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      gap: 6px;
+      padding: 8px;
+    }
+    #bar::-webkit-scrollbar { display: none; }
+    #bar .title { width: auto; margin-bottom: 0; flex: 0 0 auto; }
+    #bar select, #bar button {
+      flex: 0 0 auto;
+      min-width: 44px;
+      min-height: 44px;
+      font-size: 12px;
+      padding: 8px 10px;
+    }
+    #status {
+      margin-left: 0;
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 0 8px;
+    }
+    select, button, input { font-size: 12px; }
   }
 
   /* Connect-a-device onboarding */
@@ -326,6 +347,30 @@
   #sessModal .sx-act button.kill:hover { color: var(--red); }
   #sessModal .sx-empty { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
   #sessModal .sx-new { width: 100%; }
+  @media (max-width: 640px) {
+    #dock { padding-bottom: env(safe-area-inset-bottom); }
+    #keybar { padding: 8px; }
+    #keybar .kb {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+    #composebar { padding: 8px; }
+    #composebar .attach, #composeSend { min-width: 44px; min-height: 44px; }
+    #composeInput { min-height: 44px; }
+    #onboard .ob-close,
+    #projModal .pm-close,
+    #secModal .pm-close,
+    #sessModal .pm-close,
+    #fileExp .fx-close {
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -524,8 +569,19 @@
   let pingTimer = null;
   let currentSessionId = null;      // id of the session this socket is attached to (from `ready`)
   let targetSessionId = null;       // when set, the next connect() attaches to THIS session (switch/resume)
+  let currentSessionProjectPath = null;
+  let pendingAgentStartId = null;   // start after a project-scoped session is created
   let lastMsgAt = 0;                // last time any server message arrived (staleness watchdog)
   let onSessionReady = null;        // optional hook the dock module sets to refresh session UI
+
+  const STORAGE = {
+    lastSession: "aab.lastSessionId",
+    selectedProject: "aab.selectedProjectPath",
+    composeDraft: "aab.composeDraft."
+  };
+  function storageGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
+  function storageSet(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
+  function storageRemove(key) { try { localStorage.removeItem(key); } catch (_) {} }
 
   // ---------- Status UI ----------
   function setStatus(state, text) {
@@ -584,6 +640,26 @@
     });
   }
 
+  function selectedProject() {
+    if (!projectSel || !projectSel.value) return null;
+    const opt = projectSel.options[projectSel.selectedIndex];
+    return { path: projectSel.value, name: opt ? opt.textContent : "" };
+  }
+
+  function reconnectNow(resetTerminal) {
+    if (gate.style.display === "flex") return;
+    if (ws) {
+      try {
+        ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close();
+      } catch (_) {}
+      ws = null;
+    }
+    connected = false;
+    if (resetTerminal && term) term.reset();
+    reconnectDelay = 1000;
+    connect();
+  }
+
   // ---------- WebSocket ----------
   function wsUrl() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -619,7 +695,17 @@
       // initialize PTY with current geometry. When targetSessionId is set we attach
       // to that existing session (switch/resume); otherwise (undefined) the server
       // creates a fresh session — byte-identical to the original behavior.
-      send({ type: "init", cols: term ? term.cols : 80, rows: term ? term.rows : 24, sessionId: targetSessionId || undefined });
+      const initMsg = { type: "init", cols: term ? term.cols : 80, rows: term ? term.rows : 24 };
+      if (targetSessionId) {
+        initMsg.sessionId = targetSessionId;
+      } else {
+        const project = selectedProject();
+        if (project) {
+          initMsg.projectPath = project.path;
+          initMsg.projectName = project.name;
+        }
+      }
+      send(initMsg);
       startPing();
     };
 
@@ -679,9 +765,20 @@
       case "ready":
         // session established; remember which one so an auto-reconnect (network blip)
         // reattaches to the SAME session instead of spawning a new one.
-        if (msg.sessionId != null) { currentSessionId = msg.sessionId; targetSessionId = msg.sessionId; }
+        if (msg.sessionId != null) {
+          currentSessionId = msg.sessionId;
+          targetSessionId = msg.sessionId;
+          storageSet(STORAGE.lastSession, String(msg.sessionId));
+        }
+        currentSessionProjectPath = msg.projectPath || null;
         if (connected && term) send({ type: "resize", cols: term.cols, rows: term.rows });
         if (typeof onSessionReady === "function") onSessionReady();
+        if (pendingAgentStartId) {
+          const agentId = pendingAgentStartId;
+          pendingAgentStartId = null;
+          send({ type: "startAgent", agentId });
+          if (term) term.focus();
+        }
         break;
       case "output":
         if (term && typeof msg.data === "string") term.write(msg.data);
@@ -748,7 +845,7 @@
     } catch (e) {
       if (e.unauthorized) throw e;
     }
-    if (!list.length) { projectSel.style.display = "none"; return; }
+    if (!list.length) { projectSel.style.display = "none"; storageRemove(STORAGE.selectedProject); return; }
     projectSel.innerHTML = "";
     const none = document.createElement("option");
     none.value = ""; none.textContent = "Project…";
@@ -759,13 +856,27 @@
       opt.textContent = p.name || p.path || "project";
       projectSel.appendChild(opt);
     }
+    const saved = storageGet(STORAGE.selectedProject);
+    if (saved && [...projectSel.options].some((o) => o.value === saved)) projectSel.value = saved;
     projectSel.style.display = "";
   }
 
   // ---------- Start agent ----------
+  projectSel.addEventListener("change", () => {
+    if (projectSel.value) storageSet(STORAGE.selectedProject, projectSel.value);
+    else storageRemove(STORAGE.selectedProject);
+  });
+
   startBtn.addEventListener("click", () => {
     const agentId = agentSel.value;
     if (!agentId) return;
+    const project = selectedProject();
+    if (project && currentSessionProjectPath !== project.path) {
+      pendingAgentStartId = agentId;
+      targetSessionId = null;
+      reconnectNow(true);
+      return;
+    }
     send({ type: "startAgent", agentId });
     if (term) term.focus();
   });
@@ -1218,9 +1329,9 @@
     async function loadTree(p) {
       try {
         const r = await aFetch("/api/explorer/tree" + (p ? "?path=" + encodeURIComponent(p) : ""));
-        if (r.status === 401 || r.status === 403) return onAuthErr();
-        const d = await r.json();
-        if (d.error) { fxTree.textContent = d.error; return; }
+        if (r.status === 401) return onAuthErr();
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || d.error) { fxTree.textContent = d.error || ("Could not open folder (HTTP " + r.status + ")."); return; }
         fxCwd = d.path; fxCrumb.textContent = d.path;
         fxTree.innerHTML = "";
         if (d.parent) {
@@ -1248,9 +1359,9 @@
       if (fxDirty && !confirm("Discard unsaved changes?")) return;
       try {
         const r = await aFetch("/api/explorer/read?path=" + encodeURIComponent(p));
-        if (r.status === 401 || r.status === 403) return onAuthErr();
-        const d = await r.json();
-        if (!d.success) { alert(d.error || "Could not open file"); return; }
+        if (r.status === 401) return onAuthErr();
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.success) { alert(d.error || ("Could not open file (HTTP " + r.status + ")")); return; }
         fxFile = d.path; fxDirty = false;
         fxFname.textContent = d.name; fxFname.classList.remove("dirty");
         fxTa.value = d.content; fxOpenedContent = d.content; fxEditbar.style.display = ""; fxEmpty.style.display = "none";
@@ -1314,7 +1425,7 @@
           } catch (_) { /* the change-check is best-effort; proceed to save */ }
         }
         const r = await aFetch("/api/explorer/write", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: fxFile, content: fxTa.value }) });
-        if (r.status === 401 || r.status === 403) return onAuthErr();
+        if (r.status === 401) return onAuthErr();
         const d = await r.json();
         if (d.success) { fxDirty = false; fxOpenedContent = fxTa.value; fxFname.classList.remove("dirty"); flash("Saved"); } else alert(d.error || "Save failed");
       } catch (e) { alert("Save failed"); }
@@ -1407,6 +1518,7 @@
     const dock = $("dock"), keybar = $("keybar"), dockToggle = $("dockToggle");
     const ci = $("composeInput"), sendBtn = $("composeSend"), attachBtn = $("composeAttach"), imgFile = $("imgFile");
     const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList");
+    let draftSessionKey = null;
 
     // ---- toast ----
     let toastT = null;
@@ -1430,12 +1542,17 @@
         const b = document.createElement("div");
         b.className = "kb" + (k.t.length > 2 ? " wide" : "");
         b.textContent = k.t;
-        b.addEventListener("click", (e) => {
+        b.setAttribute("role", "button");
+        b.tabIndex = 0;
+        b.title = k.clear ? "Clear terminal display" : "Send " + k.t + " to the terminal";
+        const activate = (e) => {
           e.preventDefault();
           if (k.clear) { if (term) term.clear(); return; }
           if (!send({ type: "input", data: k.d })) toast("Not connected", true);
           if (term) term.focus();
-        });
+        };
+        b.addEventListener("click", activate);
+        b.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") activate(e); });
         keybar.appendChild(b);
       }
     }
@@ -1446,13 +1563,37 @@
     ci.addEventListener("compositionstart", () => { composing = true; });
     ci.addEventListener("compositionend", () => { composing = false; });
     function autogrow() { ci.style.height = "auto"; ci.style.height = Math.min(ci.scrollHeight, 132) + "px"; }
-    ci.addEventListener("input", autogrow);
+    function composeDraftKey(id) { return STORAGE.composeDraft + (id || "pending"); }
+    function saveComposeDraft() {
+      const key = composeDraftKey(currentSessionId);
+      if (ci.value) storageSet(key, ci.value);
+      else storageRemove(key);
+      draftSessionKey = String(currentSessionId || "pending");
+    }
+    function restoreComposeDraft() {
+      const keyId = String(currentSessionId || "pending");
+      if (draftSessionKey === keyId) return;
+      const stored = storageGet(composeDraftKey(currentSessionId));
+      if (stored || !ci.value) ci.value = stored || "";
+      else storageSet(composeDraftKey(currentSessionId), ci.value);
+      draftSessionKey = keyId;
+      autogrow();
+    }
+    function prepareComposeForSessionChange() {
+      saveComposeDraft();
+      ci.value = "";
+      draftSessionKey = null;
+      autogrow();
+    }
+    ci.addEventListener("input", () => { autogrow(); saveComposeDraft(); });
     function sendCompose() {
       const text = ci.value;
       if (!text.trim()) return;
       // sendToAgent writes the text + CR to the PTY (submits) — same as typing then Enter.
       if (!send({ type: "sendToAgent", text })) { toast("Not connected", true); return; }
+      storageRemove(composeDraftKey(currentSessionId));
       ci.value = ""; autogrow();
+      draftSessionKey = String(currentSessionId || "pending");
     }
     sendBtn.addEventListener("click", sendCompose);
     ci.addEventListener("keydown", (e) => {
@@ -1479,7 +1620,7 @@
       // Drop the absolute path into the compose box; Claude Code / Codex read local image paths.
       const cur = ci.value;
       ci.value = (cur && !/\s$/.test(cur) ? cur + " " : cur) + p + " ";
-      autogrow(); ci.focus();
+      autogrow(); saveComposeDraft(); ci.focus();
     }
     attachBtn.addEventListener("click", () => imgFile.click());
     imgFile.addEventListener("change", () => { if (imgFile.files && imgFile.files[0]) uploadImage(imgFile.files[0]); imgFile.value = ""; });
@@ -1505,14 +1646,7 @@
 
     // ---- sessions ----
     function hardReconnect() {
-      if (gate.style.display === "flex") return;   // logged out — session actions shouldn't dial
-      // Cleanly drop the current socket and dial again (targetSessionId decides which
-      // session). Detach the old socket's handlers FIRST so its async onclose can't
-      // fire a spurious scheduleReconnect once connect() flips manualClose back to false.
-      if (ws) { try { ws.onclose = null; ws.onerror = null; ws.onmessage = null; ws.close(); } catch (_) {} ws = null; }
-      if (term) term.reset();
-      reconnectDelay = 1000;
-      connect();
+      reconnectNow(true);
     }
     async function loadSessions() {
       sxList.innerHTML = "";
@@ -1545,9 +1679,10 @@
     }
     function switchSession(id) {
       if (id === currentSessionId) { closeSess(); return; }
+      prepareComposeForSessionChange();
       targetSessionId = id; closeSess(); hardReconnect();
     }
-    function newSession() { targetSessionId = null; closeSess(); hardReconnect(); }
+    function newSession() { prepareComposeForSessionChange(); targetSessionId = null; closeSess(); hardReconnect(); }
     async function renameSession(s) {
       const nn = prompt("Rename session:", s.displayName || ("Session " + s.sessionId));
       if (nn == null) return;
@@ -1571,7 +1706,7 @@
     $("sxNew").addEventListener("click", newSession);
     sessModal.addEventListener("click", (e) => { if (e.target === sessModal) closeSess(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && sessModal.classList.contains("open")) closeSess(); });
-    onSessionReady = () => { if (sessModal.classList.contains("open")) loadSessions(); };
+    onSessionReady = () => { restoreComposeDraft(); if (sessModal.classList.contains("open")) loadSessions(); };
 
     // ---- reconnect robustness: come back fast when the tab/app/network returns ----
     function maybeReconnect() {
@@ -1595,6 +1730,20 @@
   (async function boot() {
     const params = new URLSearchParams(location.search);
     const authError = params.get("auth_error");
+    let shouldCleanUrl = false;
+    const requestedSession = params.get("session");
+    if (requestedSession) {
+      if (/^\d+$/.test(requestedSession)) targetSessionId = requestedSession;
+      params.delete("session");
+      shouldCleanUrl = true;
+    } else {
+      const savedSession = storageGet(STORAGE.lastSession);
+      if (savedSession && /^\d+$/.test(savedSession)) targetSessionId = savedSession;
+    }
+    function cleanUrl() {
+      history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params.toString() : ""));
+      shouldCleanUrl = false;
+    }
 
     await loadLoginConfig();
 
@@ -1602,7 +1751,7 @@
     const t = params.get("token");
     if (t) {
       params.delete("token");
-      history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params.toString() : ""));
+      cleanUrl();
       tokenInput.value = t;
       const r = await tokenLogin(t, "");
       if (r.needTotp) {
@@ -1619,13 +1768,19 @@
 
     // 2) existing cookie session (OAuth return, or a remembered login)
     if (await cookieResume()) {
-      if (authError) history.replaceState(null, "", location.pathname);
+      if (authError) {
+        params.delete("auth_error");
+        cleanUrl();
+      } else if (shouldCleanUrl) {
+        cleanUrl();
+      }
       return;
     }
 
     // 3) otherwise, prompt
     showGate(authError ? ("Login failed: " + authError) : "");
-    if (authError) history.replaceState(null, "", location.pathname);
+    if (authError) params.delete("auth_error");
+    if (authError || shouldCleanUrl) cleanUrl();
   })();
 })();
 </script>
