@@ -527,7 +527,7 @@
   </div>
 </div>
 <input type="file" id="imgFile" accept="image/*" style="display:none" />
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div id="sessModal">
   <div class="card">
@@ -715,6 +715,7 @@
   let lastMsgAt = 0;                // last time any server message arrived (staleness watchdog)
   let onSessionReady = null;        // optional hook the dock module sets to refresh session UI
   let exposureTimer = null;
+  let toastT = null;
 
   const STORAGE = {
     lastSession: "aab.lastSessionId",
@@ -724,6 +725,16 @@
   function storageGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
   function storageSet(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
   function storageRemove(key) { try { localStorage.removeItem(key); } catch (_) {} }
+
+  function toast(msg, isErr) {
+    const t = $("toast");
+    if (!t) return;
+    t.textContent = msg;
+    t.setAttribute("aria-live", isErr ? "assertive" : "polite");
+    t.className = isErr ? "err show" : "show";
+    clearTimeout(toastT);
+    toastT = setTimeout(() => { t.className = isErr ? "err" : ""; }, 2600);
+  }
 
   // ---------- Status UI ----------
   function setStatus(state, text) {
@@ -1910,21 +1921,33 @@
     function b64ToU8(b64) { const pad = "=".repeat((4 - (b64.length % 4)) % 4); const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/"); const raw = atob(s); const u = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) u[i] = raw.charCodeAt(i); return u; }
 
     async function enable() {
+      const originalText = notifBtn.textContent;
+      notifBtn.disabled = true;
+      notifBtn.textContent = "🔔 설정 중...";
+      function fail(msg) {
+        notifBtn.disabled = false;
+        notifBtn.textContent = originalText;
+        toast(msg, true);
+      }
       try {
         const perm = await Notification.requestPermission();
-        if (perm !== "granted") { alert("알림 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 알림을 허용해 주세요."); return; }
+        if (perm !== "granted") { fail("알림 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 알림을 허용해 주세요."); return; }
         swReg = swReg || await navigator.serviceWorker.ready;
         const vr = await pf("/api/push/vapid");
-        if (!vr.ok) { alert("이 서버에서는 푸시 알림을 쓸 수 없습니다."); return; }
+        if (!vr.ok) { fail("이 서버에서는 푸시 알림을 쓸 수 없습니다."); return; }
         const { publicKey } = await vr.json();
-        if (!publicKey) { alert("푸시 키를 받지 못했습니다."); return; }
+        if (!publicKey) { fail("푸시 키를 받지 못했습니다."); return; }
         const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(publicKey) });
         const sr = await pf("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub }) });
-        if (!sr.ok) { alert("기기 등록에 실패했습니다."); return; }
+        if (!sr.ok) { fail("기기 등록에 실패했습니다."); return; }
         await pf("/api/push/test", { method: "POST" }).catch(() => {}); // immediate confirmation buzz
         notifBtn.textContent = "🔔 알림 켜짐";
         notifBtn.title = "이 기기는 세션 알림을 받습니다";
-      } catch (e) { alert("알림 설정 실패: " + ((e && e.message) || e)); }
+        notifBtn.disabled = false;
+        toast("알림이 켜졌어요. 테스트 알림을 보냈습니다.");
+      } catch (e) {
+        fail("알림 설정 실패: " + ((e && e.message) || e));
+      }
     }
     notifBtn.addEventListener("click", enable);
   })();
@@ -1938,13 +1961,6 @@
     let historyIndex = -1;
     const commandHistory = Object.create(null);
     let sessionList = [];
-
-    // ---- toast ----
-    let toastT = null;
-    function toast(msg, isErr) {
-      const t = $("toast"); t.textContent = msg; t.className = isErr ? "err show" : "show";
-      clearTimeout(toastT); toastT = setTimeout(() => { t.className = isErr ? "err" : ""; }, 2200);
-    }
 
     // ---- quick commands: safe, non-destructive one-tap commands for a fresh shell ----
     const QUICK_COMMANDS = ["pwd", "ls", "git status", "whoami"];

@@ -40,6 +40,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 27 | Session rename/close used native `prompt`/`confirm` dialogs and tiny 18-20px row actions on mobile. | 4 | 5 | 20 | Implemented | Round 5 replaced them with inline rename and two-step close controls; row action buttons are 44px+ on mobile. |
 | 28 | Markdown Preview mode was hidden on mobile by the small-screen file explorer CSS. | 3 | 5 | 15 | Implemented | Round 10 adds a mobile preview mode that hides the tree and shows the preview pane full-width. |
 | 29 | File editor still used native dialogs for dirty-file close/switch, overwrite after a file changed on disk, and file errors. | 4 | 5 | 20 | Implemented | Round 11 routes dirty/discard, overwrite, and file-error states through the in-app file action sheet; native dialogs 0 in focused test. |
+| 30 | Notification setup failures used native browser alerts and had no accessible in-app status. | 4 | 5 | 20 | Implemented | Round 12 routes permission/VAPID/subscribe/setup results through the shared toast; denied-permission focused test had native dialogs 0. |
 
 Round 1 verification:
 
@@ -182,3 +183,14 @@ Round 11 evidence:
 - Full 320/390 user-control touch-target audit: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0.
 - Test cleanup removed temp sessions 121 and 122 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round11/full/`.
+
+Round 12 evidence:
+
+- Before focused notification probe: denied permission opened a native `alert`, the toast stayed empty, page errors 0, attached to existing session 39.
+- Moved the toast helper to shared script scope, made the toast an ARIA live status, and routed notification permission/VAPID/key/subscribe/setup success or failure through it while disabling the button only during setup.
+- Focused after probe: denied permission produced native dialogs 0, page errors 0, assertive error toast, restored `🔔 알림` button, and no new session.
+- Code scan after the change: `client/index.html` has no remaining native `alert`, `confirm`, or `prompt` calls.
+- Full desktop/mobile flow: page errors 0, console errors 0, native dialogs 0, project-scoped agent start, manual `sendToAgent`, image attach, Tab special key, session switch, forced offline/online reconnect, Projects/Secrets/Files/Connect/Sessions modals, Files tree open, and notification denied toast all passed.
+- Full 320/390 user-control touch-target audit with notification toast visible: 0 audited controls under 44px; toolbar hidden controls: 0; horizontal document overflow: 0; native dialogs 0.
+- Test cleanup removed temp sessions 137, 138, 139, 140, 141, and 142 and returned the bridge to 37 sessions.
+- Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round12/full/`.
