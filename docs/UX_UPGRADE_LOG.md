@@ -43,6 +43,7 @@ Scoring: impact and safety are 1-5. Priority is impact x safety.
 | 30 | Notification setup failures used native browser alerts and had no accessible in-app status. | 4 | 5 | 20 | Implemented | Round 12 routes permission/VAPID/subscribe/setup results through the shared toast; denied-permission focused test had native dialogs 0. |
 | 31 | Major overlays looked modal but lacked dialog semantics and left focus on toolbar buttons behind them. | 3 | 5 | 15 | Implemented | Round 14 adds dialog/label/modal ARIA wiring and initial focus for Connect, Projects, Secrets, Files, file actions, and Sessions. |
 | 32 | Modal focus could still escape with Tab, and closing overlays did not restore focus to the opener. | 3 | 5 | 15 | Implemented | Round 15 adds shared modal focus containment and opener restoration for Connect, Projects, Secrets, Files, file actions, and Sessions. |
+| 33 | The public landing was not tracked in this repo and did not reflect the latest mobile starter, launch assist, and quiet notification work. | 4 | 3 | 12 | Implemented | Round 19 adds a tracked static landing under `public/` and deploys it to `https://anyagent-bridge.vercel.app`; production audit passed at 1440, 390, and 320 widths. |
 
 Round 1 verification:
 
@@ -261,3 +262,11 @@ Round 18 evidence:
 - Full desktop/mobile flow: health 200, page errors 0, console errors 0, native dialogs 0, desktop starter/compose/image attach/Esc key/session filter/new session/switch back/offline-online reconnect passed; 320px mobile starter `pwd`, real `startAgent`, launch assist Esc and Ctrl-C input frames, and 44px+ starter/assist controls passed.
 - Test cleanup removed temp sessions 183, 184, and 185 and returned the bridge to 37 sessions.
 - Full flow report/screenshots: `/tmp/anyagent-bridge-ux-round18/full/`.
+
+Round 19 evidence:
+
+- Before landing probe: `https://anyagent-bridge.vercel.app` served a 3,690,014-byte single HTML page from deployment `dpl_Awv8UTqKmiNjvrX5FymXarTX8Zh9`, and the package repo had no tracked landing source.
+- Added a tracked static landing under `public/` with actual app screenshots, updated copy for fresh starter, 320px mobile controls, launch assist, quiet notification modes, sessions, Projects/Secrets/Files, exposure badge, and local-first security.
+- Local static audit: `/tmp/anyagent-bridge-ux-round19/landing-local/report.json` passed for 1440x900, 390x844, and 320x720 with page errors 0, console errors 0, failed requests 0, horizontal overflow 0, all images loaded, all CTA targets 40px+ high, and next-section hint visible in the first viewport.
+- Deployed via Vercel prebuilt production deploy to `dpl_5qcfgheMgkPSMzWnatvVAC5SDgaB`; alias `https://anyagent-bridge.vercel.app` returned 200 with 20,189-byte HTML and screenshot endpoints returned 200.
+- Production Playwright audit: `/tmp/anyagent-bridge-ux-round19/landing-production/report.json` passed at 1440, 390, and 320 widths with page errors 0, console errors 0, failed requests 0, all images loaded, no horizontal overflow, touch-safe CTAs, and content markers for starter, Quiet, launch assist, and Node 18+.

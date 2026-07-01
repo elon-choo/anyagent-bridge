@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AnyAgent Bridge | 폰에서 내 컴퓨터의 터미널과 AI 에이전트 조작</title>
+  <meta name="description" content="AnyAgent Bridge는 내 컴퓨터의 터미널, Claude Code, Codex 같은 CLI 에이전트를 폰 브라우저에서 안전하게 조작하는 오픈소스 브릿지입니다.">
+  <meta property="og:title" content="AnyAgent Bridge">
+  <meta property="og:description" content="내 컴퓨터의 터미널과 CLI AI 에이전트를 폰 브라우저에서 그대로 조작하세요.">
+  <meta property="og:image" content="/screenshots/mobile.png">
+  <meta name="theme-color" content="#0b0d10">
+  <style>
+    :root {
+      --ink: #111318;
+      --muted: #59616d;
+      --paper: #f7f8f3;
+      --paper-2: #ffffff;
+      --night: #0b0d10;
+      --night-2: #171a20;
+      --line: #d8ddd2;
+      --line-dark: rgba(255,255,255,.18);
+      --green: #2f8f6f;
+      --blue: #2b6be8;
+      --coral: #e2553d;
+      --amber: #f4b63d;
+      --radius: 8px;
+      --shadow: 0 20px 70px rgba(10, 12, 16, .18);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+      line-height: 1.65;
+      word-break: keep-all;
+      letter-spacing: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; height: auto; display: block; }
+    .wrap { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+    .nav {
+      position: fixed;
+      z-index: 20;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      color: #fff;
+      background: rgba(11, 13, 16, .78);
+      border-bottom: 1px solid var(--line-dark);
+      backdrop-filter: blur(14px);
+    }
+    .nav .wrap {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .brand { font-weight: 800; font-size: 18px; }
+    .navlinks { display: flex; align-items: center; gap: 18px; color: rgba(255,255,255,.78); font-size: 14px; }
+    .navlinks a:hover { color: #fff; }
+    .nav-cta {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--night);
+      font-weight: 750;
+    }
+    .hero {
+      min-height: 92vh;
+      color: #fff;
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      padding: 116px 0 74px;
+      background-image:
+        linear-gradient(90deg, rgba(7,8,11,.96) 0%, rgba(7,8,11,.76) 44%, rgba(7,8,11,.28) 100%),
+        url("/screenshots/agent-running.png");
+      background-size: cover;
+      background-position: center right;
+      border-bottom: 1px solid #1f242c;
+    }
+    .hero .wrap { position: relative; z-index: 1; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 12px;
+      border: 1px solid rgba(244, 182, 61, .45);
+      border-radius: var(--radius);
+      color: #ffe3a0;
+      background: rgba(244, 182, 61, .12);
+      font-size: 13px;
+      font-weight: 750;
+    }
+    h1 {
+      margin: 22px 0 18px;
+      max-width: 760px;
+      font-size: 64px;
+      line-height: 1.03;
+      letter-spacing: 0;
+    }
+    .hero p {
+      max-width: 680px;
+      margin: 0;
+      color: rgba(255,255,255,.82);
+      font-size: 21px;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .btn {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 18px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .primary { background: var(--amber); color: #171009; }
+    .secondary { border-color: rgba(255,255,255,.26); color: #fff; background: rgba(255,255,255,.08); }
+    .signal {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: #d6dbd0;
+      border-bottom: 1px solid var(--line);
+    }
+    .signal div { background: var(--paper-2); padding: 18px 22px; }
+    .signal b { display: block; font-size: 14px; margin-bottom: 2px; }
+    .signal span { color: var(--muted); font-size: 13px; }
+    section { padding: 84px 0; }
+    .section-head { max-width: 720px; margin-bottom: 34px; }
+    .muted { color: var(--muted); }
+    .kicker { color: var(--coral); font-weight: 800; font-size: 13px; text-transform: uppercase; }
+    h2 { margin: 8px 0 12px; font-size: 40px; line-height: 1.12; letter-spacing: 0; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 18px; }
+    .phone-flow {
+      display: grid;
+      grid-template-columns: minmax(240px, 360px) 1fr;
+      gap: 44px;
+      align-items: center;
+    }
+    .phone-shell {
+      width: min(100%, 330px);
+      margin: 0 auto;
+      padding: 12px;
+      border-radius: 30px;
+      background: var(--night);
+      box-shadow: var(--shadow);
+    }
+    .phone-shell img { border-radius: 22px; border: 1px solid var(--line-dark); }
+    .steps { display: grid; gap: 14px; }
+    .step {
+      display: grid;
+      grid-template-columns: 46px 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 18px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .num {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius);
+      background: #11281f;
+      color: #a6f2cf;
+      font-weight: 900;
+    }
+    .step h3 { margin: 0 0 4px; font-size: 18px; }
+    .step p { margin: 0; color: var(--muted); font-size: 15px; }
+    .dark {
+      color: #f4f6f0;
+      background: var(--night);
+      border-top: 1px solid #222831;
+      border-bottom: 1px solid #222831;
+    }
+    .dark .section-head p { color: rgba(244,246,240,.68); }
+    .dark .kicker { color: #a6f2cf; }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+    .feature {
+      min-height: 174px;
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,.13);
+      border-radius: var(--radius);
+      background: var(--night-2);
+    }
+    .feature .mark {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 14px;
+      border-radius: var(--radius);
+      background: var(--green);
+    }
+    .feature:nth-child(2) .mark, .feature:nth-child(6) .mark { background: var(--blue); }
+    .feature:nth-child(3) .mark, .feature:nth-child(7) .mark { background: var(--coral); }
+    .feature:nth-child(4) .mark, .feature:nth-child(8) .mark { background: var(--amber); }
+    .feature h3 { margin: 0 0 7px; font-size: 16px; }
+    .feature p { margin: 0; color: rgba(244,246,240,.66); font-size: 14px; }
+    .gallery {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+    figure {
+      margin: 0;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 16px 44px rgba(10,12,16,.08);
+    }
+    figure img {
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      background: #101216;
+    }
+    figcaption { padding: 14px 16px 16px; }
+    figcaption b { display: block; margin-bottom: 2px; }
+    figcaption span { color: var(--muted); font-size: 14px; }
+    .side-gallery { display: grid; gap: 18px; }
+    .security {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .security-panel {
+      padding: 26px;
+      border-radius: var(--radius);
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+    .security-panel h3 { margin: 0 0 10px; font-size: 21px; }
+    .security-panel ul { margin: 0; padding-left: 18px; color: var(--muted); }
+    .security-panel li + li { margin-top: 8px; }
+    .install {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+    .install-card {
+      padding: 24px;
+      border-radius: var(--radius);
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+    .install-card h3 { margin: 0 0 10px; }
+    pre {
+      margin: 14px 0 0;
+      padding: 16px;
+      overflow: auto;
+      color: #d8ffe8;
+      background: #101216;
+      border-radius: var(--radius);
+      border: 1px solid #272d35;
+      white-space: pre-wrap;
+    }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 14px; }
+    .footer-cta {
+      color: #fff;
+      background: var(--night);
+      padding: 76px 0;
+      text-align: center;
+    }
+    .footer-cta h2 { margin-left: auto; margin-right: auto; max-width: 760px; }
+    .footer-cta p { max-width: 620px; margin: 0 auto; color: rgba(255,255,255,.72); font-size: 18px; }
+    footer {
+      padding: 26px 0;
+      color: var(--muted);
+      background: #fff;
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+    }
+    footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    @media (max-width: 900px) {
+      .navlinks a:not(.nav-cta) { display: none; }
+      h1 { font-size: 46px; }
+      .hero { min-height: 86vh; background-position: 70% center; }
+      .signal { grid-template-columns: repeat(2, 1fr); }
+      .phone-flow, .gallery, .security, .install { grid-template-columns: 1fr; }
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 560px) {
+      .wrap { width: min(100% - 28px, 1120px); }
+      .nav { height: 58px; }
+      .brand { font-size: 16px; }
+      .nav-cta { min-height: 40px; padding: 0 12px; font-size: 14px; }
+      .hero {
+        min-height: 88vh;
+        padding: 94px 0 44px;
+        background-position: 78% center;
+      }
+      h1 { font-size: 38px; }
+      .hero p { font-size: 17px; }
+      .actions { gap: 10px; }
+      .btn { width: 100%; min-height: 48px; }
+      .signal { grid-template-columns: 1fr; }
+      section { padding: 58px 0; }
+      h2 { font-size: 30px; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .step { grid-template-columns: 40px 1fr; padding: 14px; }
+      .num { width: 40px; height: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="Primary">
+    <div class="wrap">
+      <a class="brand" href="#">AnyAgent Bridge</a>
+      <div class="navlinks">
+        <a href="#mobile">Mobile UX</a>
+        <a href="#features">Features</a>
+        <a href="#security">Security</a>
+        <a class="nav-cta" href="https://github.com/elon-choo/anyagent-bridge">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap">
+      <span class="eyebrow">Open source local-first bridge</span>
+      <h1>AnyAgent Bridge</h1>
+      <p>내 컴퓨터의 터미널과 Claude Code, Codex 같은 CLI 에이전트를 폰 브라우저에서 그대로 조작합니다. 새 세션은 바로 시작할 수 있고, 모바일 입력 독과 알림 모드까지 갖춘 실제 작업용 리모컨입니다.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/elon-choo/anyagent-bridge">GitHub에서 시작</a>
+        <a class="btn secondary" href="#start">설치 명령 보기</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="signal" aria-label="Product highlights">
+    <div><b>3탭 안에 첫 명령</b><span>Fresh starter로 `pwd`, `ls`, agent 시작을 바로 실행</span></div>
+    <div><b>320px 대응</b><span>모바일 툴바, 키바, launch assist 모두 44px+ 타깃</span></div>
+    <div><b>끊김 복구</b><span>세션과 입력 초안을 보존하고 빠르게 재연결</span></div>
+    <div><b>조용한 알림</b><span>All, Important, Quiet, Paused를 기기별로 선택</span></div>
+  </div>
+
+  <section id="mobile">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Mobile-first control</span>
+        <h2>처음 열어도 빈 터미널 앞에서 멈추지 않습니다.</h2>
+        <p>새 세션에는 starter가 뜨고, agent 신뢰 프롬프트가 나오면 Enter, Esc, Ctrl-C가 엄지 위치에 남습니다.</p>
+      </div>
+      <div class="phone-flow">
+        <div class="phone-shell">
+          <img src="/screenshots/mobile.png" alt="AnyAgent Bridge mobile terminal controls" width="1170" height="2532">
+        </div>
+        <div class="steps">
+          <div class="step">
+            <div class="num">1</div>
+            <div><h3>QR로 폰 연결</h3><p>Connect 화면에서 QR을 스캔하면 같은 세션을 폰에서 이어받습니다.</p></div>
+          </div>
+          <div class="step">
+            <div class="num">2</div>
+            <div><h3>Starter에서 바로 실행</h3><p>Start agent, `pwd`, `ls`, `git status`를 터미널 위에서 한 번에 보냅니다.</p></div>
+          </div>
+          <div class="step">
+            <div class="num">3</div>
+            <div><h3>신뢰 프롬프트도 폰 친화적</h3><p>Claude/Codex 시작 직후 Enter, Esc, 방향키, Ctrl-C가 compact launch assist에 표시됩니다.</p></div>
+          </div>
+          <div class="step">
+            <div class="num">4</div>
+            <div><h3>조용한 알림 유지</h3><p>진행 상황, 완료, 질문 알림을 기기별 모드로 조절해 방해를 줄입니다.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dark" id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Built for real sessions</span>
+        <h2>터미널 하나가 아니라 원격 작업 환경 전체를 다룹니다.</h2>
+        <p>PTY, 파일, 프로젝트, secrets, 세션 전환, reconnect, push까지 한 화면 안에서 이어집니다.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature"><div class="mark"></div><h3>실제 PTY 터미널</h3><p>브라우저에서 내 컴퓨터의 shell을 그대로 제어하고 scrollback을 유지합니다.</p></div>
+        <div class="feature"><div class="mark"></div><h3>Agent launcher</h3><p>Claude Code, Codex, aider 등 등록한 CLI 에이전트를 한 번에 실행합니다.</p></div>
+        <div class="feature"><div class="mark"></div><h3>모바일 입력 독</h3><p>메시지 입력, 이미지 경로 첨부, 특수키, 빠른 명령을 폰 화면에 맞춥니다.</p></div>
+        <div class="feature"><div class="mark"></div><h3>세션 매니저</h3><p>검색, 이름 변경, 최근 활동, 안전한 close 확인으로 여러 세션을 관리합니다.</p></div>
+        <div class="feature"><div class="mark"></div><h3>Files와 Markdown</h3><p>허용 경로 안의 파일을 탐색하고 편집하며 preview fallback까지 제공합니다.</p></div>
+        <div class="feature"><div class="mark"></div><h3>Projects와 Secrets</h3><p>폴더를 골라 project-scoped terminal을 만들고 `.env.local`을 UI에서 관리합니다.</p></div>
+        <div class="feature"><div class="mark"></div><h3>Exposure badge</h3><p>Local, Network, Tunnel 상태를 상단에서 바로 확인해 링크 범위를 판단합니다.</p></div>
+        <div class="feature"><div class="mark"></div><h3>Push controls</h3><p>서비스 워커가 알림 모드를 적용해 progress/done/question 소음을 조절합니다.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Actual UI</span>
+        <h2>문서용 목업이 아니라 실제 앱 화면입니다.</h2>
+        <p>로컬 브릿지를 띄운 뒤 같은 UI가 데스크톱과 모바일 브라우저에서 동작합니다.</p>
+      </div>
+      <div class="gallery">
+        <figure>
+          <img src="/screenshots/terminal-view.png" alt="AnyAgent Bridge desktop terminal session" width="2800" height="1760">
+          <figcaption><b>터미널과 세션</b><span>실제 shell output, 세션 유지, 재연결 상태를 한 화면에서 확인합니다.</span></figcaption>
+        </figure>
+        <div class="side-gallery">
+          <figure>
+            <img src="/screenshots/connect-device.png" alt="QR code connect-device modal" width="2800" height="1800">
+            <figcaption><b>폰 연결</b><span>QR과 공개 URL 상태를 분리해 보여줍니다.</span></figcaption>
+          </figure>
+          <figure>
+            <img src="/screenshots/agent-running.png" alt="Agent running in AnyAgent Bridge" width="2800" height="1760">
+            <figcaption><b>Agent 실행</b><span>CLI agent가 기존 인증과 로컬 파일 시스템을 그대로 사용합니다.</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="security">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Security posture</span>
+        <h2>기본은 localhost, 외부 공개는 명시적으로만.</h2>
+        <p>브릿지는 클라우드 중개 서비스가 아니라 사용자의 컴퓨터에서 실행되는 self-hosted 도구입니다.</p>
+      </div>
+      <div class="security">
+        <div class="security-panel">
+          <h3>기본 보호</h3>
+          <ul>
+            <li>처음 실행은 `127.0.0.1`에만 바인딩됩니다.</li>
+            <li>접속 토큰은 로컬 `.data/auth.json`에 저장됩니다.</li>
+            <li>OAuth, TOTP 2FA, signed session은 선택적으로 켤 수 있습니다.</li>
+          </ul>
+        </div>
+        <div class="security-panel">
+          <h3>공개 전 확인</h3>
+          <ul>
+            <li>Tunnel은 사용자가 선택한 CLI provider를 통해서만 열립니다.</li>
+            <li>상단 exposure badge로 Local, Network, Tunnel 상태를 확인합니다.</li>
+            <li>공개 URL을 공유하기 전에 `docs/SECURITY.md`를 읽는 흐름을 권장합니다.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker">Start in one minute</span>
+        <h2>Node 18+만 있으면 바로 실행합니다.</h2>
+        <p>설치는 npm 패키지, 소스 체크아웃, Docker 중 원하는 방식으로 시작할 수 있습니다.</p>
+      </div>
+      <div class="install">
+        <div class="install-card">
+          <h3>처음 쓰는 사람</h3>
+          <p class="muted">환경 체크와 모바일 연결 안내가 포함된 setup wizard를 실행합니다.</p>
+          <pre><code>npx anyagent-bridge setup</code></pre>
+        </div>
+        <div class="install-card">
+          <h3>AI agent에게 맡기기</h3>
+          <p class="muted">Claude Code나 Codex에 아래 문장을 주면 AGENTS.md playbook을 따라 설치합니다.</p>
+          <pre><code>Install and run this for me:
+https://github.com/elon-choo/anyagent-bridge
+Do everything you can yourself, and only ask when a human step is required.</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="footer-cta">
+    <div class="wrap">
+      <h2>터미널을 폰으로 옮기는 게 아니라, 작업 흐름 전체를 이어 붙입니다.</h2>
+      <p>오픈소스, 무료, 로컬 우선. 필요할 때만 터널을 열고, 기존 CLI agent 인증은 그대로 둡니다.</p>
+      <div class="actions" style="justify-content:center">
+        <a class="btn primary" href="https://github.com/elon-choo/anyagent-bridge">GitHub 저장소 열기</a>
+        <a class="btn secondary" href="https://github.com/elon-choo/anyagent-bridge/blob/main/docs/GETTING-STARTED.md">가이드 읽기</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span>AnyAgent Bridge</span>
+      <span>MIT Licensed · self-hosted · local-first</span>
+    </div>
+  </footer>
+</body>
+</html>
