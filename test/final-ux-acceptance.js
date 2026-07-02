@@ -837,6 +837,44 @@ async function localClearReplayFlow(browser, state) {
   return { session, marker, tracker, beforeClear, afterClear, reloadReady, afterReload };
 }
 
+async function localMultilineHistoryFlow(browser, state) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+  const page = await context.newPage();
+  const tracker = attachPageWatchers(page, state, 'local-multiline-history');
+  await openApp(page, BASE_URL);
+  const session = await waitForTracker(tracker, item => item.sessionIds[0], 'multiline history initial session');
+  const historyText = 'echo FINAL_HISTORY_MULTI_A\necho FINAL_HISTORY_MULTI_B';
+  const typedText = 'FIRST LINE\nSECOND LINE';
+
+  await page.fill('#composeInput', historyText);
+  await page.click('#composeSend');
+  await waitFor(page, () => document.body.innerText.includes('FINAL_HISTORY_MULTI_B'), null, 'multiline history output', 15000);
+
+  await page.fill('#composeInput', '');
+  await page.focus('#composeInput');
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(150);
+  const recalled = await composeValue(page);
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(150);
+  const afterDown = await composeValue(page);
+
+  await page.fill('#composeInput', typedText);
+  await page.evaluate(() => {
+    const el = document.querySelector('#composeInput');
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  });
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(150);
+  const typedAfterUp = await composeValue(page);
+  const snapshot = await stateSnapshot(page);
+  await page.screenshot({ path: path.join(OUT_DIR, 'local-multiline-history-after.png'), fullPage: true });
+
+  await context.close();
+  return { session, tracker, historyText, recalled, afterDown, typedText, typedAfterUp, snapshot };
+}
+
 async function localMobileLandscapeFlow(browser, state) {
   const context = await browser.newContext({
     viewport: { width: 844, height: 390 },
@@ -1198,6 +1236,7 @@ function buildChecks(report) {
   const multi = report.flows.localMultiViewer;
   const closeCurrent = report.flows.localCloseCurrent;
   const clearReplay = report.flows.localClearReplay;
+  const multilineHistory = report.flows.localMultilineHistory;
   const landscape = report.flows.localMobileLandscape844;
   const keyboard = report.flows.localMobileKeyboard390;
   const notifications = report.flows.localMobileNotifications390;
@@ -1307,6 +1346,14 @@ function buildChecks(report) {
         clearReplay.reloadReady.isReconnect === true,
       markerStaysHiddenAfterReload: !clearReplay.afterReload.bodyHasFinalClearReplay,
       noOverflow: !clearReplay.afterClear.overflowX && !clearReplay.afterReload.overflowX
+    },
+    localMultilineHistory: {
+      newSession: !!multilineHistory.session,
+      sendToAgent: hasSent(multilineHistory.tracker, 'sendToAgent', item => item.text === multilineHistory.historyText),
+      recalledMultiline: multilineHistory.recalled === multilineHistory.historyText,
+      arrowDownClears: multilineHistory.afterDown === '',
+      typedMultilineProtected: multilineHistory.typedAfterUp === multilineHistory.typedText,
+      noOverflow: !multilineHistory.snapshot.overflowX
     },
     localMobileLandscape844: {
       newSession: !!landscape.initialSession,
@@ -1424,6 +1471,7 @@ async function main() {
     report.flows.localMultiViewer = await localMultiViewerFlow(browser, state);
     report.flows.localCloseCurrent = await localCloseCurrentFlow(browser, state);
     report.flows.localClearReplay = await localClearReplayFlow(browser, state);
+    report.flows.localMultilineHistory = await localMultilineHistoryFlow(browser, state);
     report.flows.localMobileLandscape844 = await localMobileLandscapeFlow(browser, state);
     report.flows.localMobileKeyboard390 = await localMobileKeyboardFlow(browser, state);
     report.flows.localMobileNotifications390 = await localMobileNotificationsFlow(browser, state);
@@ -1449,7 +1497,7 @@ async function main() {
     report.artifactCleanup = { ok: false, error: compactMessage(err.message || err) };
   }
 
-  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMultiViewer && report.flows.localCloseCurrent && report.flows.localClearReplay && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
+  const haveRequiredReports = report.flows.localDesktop && report.flows.localMobile320 && report.flows.localMultiViewer && report.flows.localCloseCurrent && report.flows.localClearReplay && report.flows.localMultilineHistory && report.flows.localMobileLandscape844 && report.flows.localMobileKeyboard390 && report.flows.localMobileNotifications390 && report.flows.mobileFiles390 && report.flows.funnelMobile390 && report.landingProduction && report.pwa;
   report.checks = haveRequiredReports ? buildChecks(report) : {};
   report.failures = [
     ...(runError ? [`runner error: ${compactMessage(runError.message || runError)}`] : []),

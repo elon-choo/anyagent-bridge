@@ -2317,6 +2317,7 @@
     const termwrap = $("termwrap"), sessModal = $("sessModal"), sxList = $("sxList"), sxFilter = $("sxFilter"), sxCount = $("sxCount");
     let draftSessionKey = null;
     let historyIndex = -1;
+    let historyRecallActive = false;
     const commandHistory = Object.create(null);
     let sessionList = [];
 
@@ -2335,15 +2336,18 @@
       if (list[list.length - 1] !== v) list.push(v);
       while (list.length > 30) list.shift();
       historyIndex = list.length;
+      historyRecallActive = false;
     }
     function resetHistoryCursor() {
       historyIndex = historyList().length;
+      historyRecallActive = false;
     }
     function recallHistory(delta) {
       const list = historyList();
       if (!list.length) return false;
       historyIndex = Math.max(0, Math.min(list.length, historyIndex + delta));
       ci.value = historyIndex >= list.length ? "" : list[historyIndex];
+      historyRecallActive = historyIndex < list.length;
       autogrow();
       saveComposeDraft();
       return true;
@@ -2351,7 +2355,9 @@
     function canRecallHistory() {
       const value = ci.value || "";
       if (typeof ci.selectionStart === "number" && typeof ci.selectionEnd === "number" && ci.selectionStart !== ci.selectionEnd) return false;
-      return value.indexOf("\n") === -1;
+      if (value.indexOf("\n") === -1) return true;
+      const list = historyList();
+      return historyRecallActive && historyIndex >= 0 && historyIndex < list.length && value === list[historyIndex];
     }
     function sendText(text) {
       if (!String(text || "").trim()) return false;
@@ -2518,7 +2524,7 @@
       hideAgentAssist();
       autogrow();
     }
-    ci.addEventListener("input", () => { autogrow(); saveComposeDraft(); });
+    ci.addEventListener("input", () => { historyRecallActive = false; autogrow(); saveComposeDraft(); });
     function sendCompose() {
       const text = ci.value;
       if (!text.trim()) return;
@@ -2526,6 +2532,7 @@
       if (!sendText(text)) return;
       storageRemove(composeDraftKey(currentSessionId));
       ci.value = ""; autogrow();
+      historyRecallActive = false;
       draftSessionKey = String(currentSessionId || "pending");
     }
     sendBtn.addEventListener("click", sendCompose);

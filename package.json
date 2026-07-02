@@ -47,6 +47,7 @@
   "scripts": {
     "start": "node server/index.js",
     "test": "node test/stage4-smoke.js && node test/stage4-boot.js",
+    "test:client-compose-history": "node test/client-compose-history.js",
     "test:phone-preflight": "node test/phone-smoke-preflight.js",
     "test:ux-final": "node test/final-ux-acceptance.js"
   },
