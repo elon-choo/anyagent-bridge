@@ -43,8 +43,12 @@ agent launcher, a file browser, and (if configured) project and tunnel controls.
 Pick an agent (e.g. **Claude Code**) from the dropdown and start it. The bridge
 spawns the agent's CLI inside the session's PTY, so you interact with it exactly
 as you would in your own terminal — streamed live to the browser. Type prompts,
-send keys, and watch output in real time. Detaching the browser keeps the session
-alive; reconnecting reattaches with full scrollback.
+send keys, and watch output in real time. Press **↑ / ↓** in the compose box to
+recall previously sent commands (shell-style history, scoped per session); a
+multiline draft you are typing is preserved, and within a recalled multiline
+entry the arrows move the caret and only step through history at the first/last
+line. Detaching the browser keeps the session alive; reconnecting reattaches with
+full scrollback.
 
 To scope a session to a folder, click **📁 Projects** in the top bar and *browse* to
 it — no typing the path. Saved projects appear in the toolbar dropdown; pick one
