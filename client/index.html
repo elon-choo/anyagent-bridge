@@ -2359,6 +2359,16 @@
       const list = historyList();
       return historyRecallActive && historyIndex >= 0 && historyIndex < list.length && value === list[historyIndex];
     }
+    function caretAtFirstLine() {
+      const pos = ci.selectionStart;
+      if (typeof pos !== "number") return true;
+      return (ci.value || "").slice(0, pos).indexOf("\n") === -1;
+    }
+    function caretAtLastLine() {
+      const pos = ci.selectionEnd;
+      if (typeof pos !== "number") return true;
+      return (ci.value || "").slice(pos).indexOf("\n") === -1;
+    }
     function sendText(text) {
       if (!String(text || "").trim()) return false;
       if (!send({ type: "sendToAgent", text })) { toast("Not connected", true); return false; }
@@ -2539,9 +2549,9 @@
     ci.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !composing && !e.isComposing) { e.preventDefault(); sendCompose(); }
       else if (e.key === "ArrowUp" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !composing && !e.isComposing) {
-        if (canRecallHistory() && recallHistory(-1)) e.preventDefault();
+        if (canRecallHistory() && caretAtFirstLine() && recallHistory(-1)) e.preventDefault();
       } else if (e.key === "ArrowDown" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !composing && !e.isComposing) {
-        if (canRecallHistory() && recallHistory(1)) e.preventDefault();
+        if (canRecallHistory() && caretAtLastLine() && recallHistory(1)) e.preventDefault();
       }
     });
 

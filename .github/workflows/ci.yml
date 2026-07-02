@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions pinned to commit SHA (supply-chain hardening); comment tracks the tag.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Unit + boot smoke tests
+        run: npm test
+      # Playwright is an opt-in dev-only tool (not a package dependency); install a
+      # pinned version on the runner so the client UX regression check is deterministic.
+      - name: Install Playwright
+        run: npm install --no-save playwright@1.61.1
+      - run: npx playwright install --with-deps chromium
+      - name: Client compose-history regression
+        run: npm run test:client-compose-history

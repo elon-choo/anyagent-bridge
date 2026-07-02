@@ -174,27 +174,53 @@ async function main() {
     await page.waitForSelector('#terminal .xterm', { timeout: 10000 });
     await page.waitForFunction(() => document.querySelector('#statusText')?.textContent.includes('connected'), { timeout: 10000 });
 
+    const olderText = 'echo OLDER_MULTI_A\necho OLDER_MULTI_B';
     const historyText = 'echo FINAL_HISTORY_MULTI_A\necho FINAL_HISTORY_MULTI_B';
     const typedText = 'FIRST LINE\nSECOND LINE';
 
-    await page.fill('#composeInput', historyText);
-    await page.click('#composeSend');
-    await page.waitForFunction(
-      (expected) => window.__sentFrames.some((f) => f && f.type === 'sendToAgent' && f.text === expected),
-      historyText,
-      { timeout: 5000 }
-    );
+    const sendCommand = async (text) => {
+      await page.fill('#composeInput', text);
+      await page.click('#composeSend');
+      await page.waitForFunction(
+        (expected) => window.__sentFrames.some((f) => f && f.type === 'sendToAgent' && f.text === expected),
+        text,
+        { timeout: 5000 }
+      );
+    };
+    await sendCommand(olderText);
+    await sendCommand(historyText);
 
+    // Recall the most recent multiline entry from an empty compose box.
     await page.fill('#composeInput', '');
     await page.focus('#composeInput');
     await page.keyboard.press('ArrowUp');
     await page.waitForTimeout(100);
     const recalled = await page.$eval('#composeInput', (el) => el.value);
 
+    // Caret sits on the last line of the recalled entry: ArrowUp must move the
+    // caret within the textarea, NOT jump to the older history entry.
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(100);
+    const caretHeldOnMultiline = await page.$eval('#composeInput', (el) => el.value);
+
+    // With the caret on the first line, ArrowUp navigates to the older entry.
+    await page.$eval('#composeInput', (el) => {
+      el.focus();
+      el.setSelectionRange(0, 0);
+    });
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(100);
+    const recalledOlder = await page.$eval('#composeInput', (el) => el.value);
+
+    // ArrowDown from the last line navigates forward through history, then clears.
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(100);
+    const forward = await page.$eval('#composeInput', (el) => el.value);
     await page.keyboard.press('ArrowDown');
     await page.waitForTimeout(100);
     const afterDown = await page.$eval('#composeInput', (el) => el.value);
 
+    // A freshly typed multiline draft is protected from arrow-key recall.
     await page.fill('#composeInput', typedText);
     await page.$eval('#composeInput', (el) => {
       el.focus();
@@ -210,6 +236,9 @@ async function main() {
         historyText
       ),
       recalledMultiline: recalled === historyText,
+      caretHeldOnMultiline: caretHeldOnMultiline === historyText,
+      recalledOlderFromFirstLine: recalledOlder === olderText,
+      arrowDownForward: forward === historyText,
       arrowDownClears: afterDown === '',
       typedMultilineProtected: typedAfterUp === typedText,
       pageErrors,
@@ -218,6 +247,9 @@ async function main() {
     };
     report.ok = report.sentExact &&
       report.recalledMultiline &&
+      report.caretHeldOnMultiline &&
+      report.recalledOlderFromFirstLine &&
+      report.arrowDownForward &&
       report.arrowDownClears &&
       report.typedMultilineProtected &&
       report.pageErrors.length === 0;

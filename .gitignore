@@ -15,3 +15,8 @@ client/.well-known/
 
 # Built TWA APK (per-build, signed — not committed)
 client/anyagent-bridge.apk
+
+# Editor / tooling backup artifacts — never tracked or published (files[] ships client/)
+*.bak
+*.bak-*
+*.orig
